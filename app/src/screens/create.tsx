@@ -274,19 +274,6 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
         title="그림 라이브러리"
         step="2 / 4"
       />
-      <Glass
-        style={{
-          alignSelf: "flex-start",
-          height: 32,
-          paddingHorizontal: 12,
-          borderRadius: 16,
-          justifyContent: "center",
-        }}
-      >
-        <T size={13} weight="500">
-          {draft.areaLabel}
-        </T>
-      </Glass>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {(
           [
@@ -540,18 +527,6 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
         }}
       >
         <RoundBtn onPress={() => navigation.goBack()} />
-        <Glass
-          style={{
-            height: 44,
-            paddingHorizontal: 14,
-            borderRadius: 22,
-            justifyContent: "center",
-          }}
-        >
-          <T size={14} weight="600">
-            {draft.areaLabel}
-          </T>
-        </Glass>
         <Glass
           style={{
             marginLeft: "auto",
