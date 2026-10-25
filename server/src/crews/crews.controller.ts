@@ -15,7 +15,7 @@ export class CrewsController {
   }
 
   @Post('crews')
-  create(@CurrentUser() u: AuthUser, @Body() b: { name: string; hasPhoto?: boolean; color?: string; region?: string }) {
+  create(@CurrentUser() u: AuthUser, @Body() b: { name: string; photoUrl?: string | null; color?: string; region?: string }) {
     return this.crews.create(u.id, b);
   }
 

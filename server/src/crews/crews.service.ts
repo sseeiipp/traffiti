@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type pg from 'pg';
 import { DbService, Queryable } from '../db/db.service.js';
+import { photoUrlOf } from '../images/images.controller.js';
 import {
   COLOR_CLASH,
   colorDistance,
@@ -117,15 +118,16 @@ export class CrewsService {
     return n;
   }
 
-  async create(userId: number, b: { name: string; hasPhoto?: boolean; color?: string; region?: string }) {
+  async create(userId: number, b: { name: string; photoUrl?: string | null; color?: string; region?: string }) {
     const name = this.validateName(b.name);
+    const photo = b.photoUrl === undefined ? null : photoUrlOf(b.photoUrl);
     return this.db.tx(async (c) => {
       if ((await this.activeCount(userId, c)) >= MAX_CREWS) {
         throw new ConflictException(`크루는 최대 ${MAX_CREWS}개까지 들어갈 수 있어요.`);
       }
       const crew = await this.db.one<{ id: number }>(
-        `INSERT INTO crews (name, has_photo, color, home_region, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [name, !!b.hasPhoto, b.color ?? '#A3E635', b.region ?? '성동구 성수동', userId],
+        `INSERT INTO crews (name, has_photo, photo_url, color, home_region, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [name, !!photo, photo, b.color ?? '#A3E635', b.region ?? '성동구 성수동', userId],
         c,
       );
       await this.addMember(crew!.id, userId, 'leader', c);
@@ -135,8 +137,8 @@ export class CrewsService {
   }
 
   private async liveInvite(code: string, db: Queryable = this.db.pool) {
-    return this.db.one<{ crew_id: number; name: string; join_policy: string; has_photo: boolean; color: string }>(
-      `SELECT i.crew_id, c.name, c.join_policy, c.has_photo, c.color FROM crew_invites i JOIN crews c ON c.id = i.crew_id
+    return this.db.one<{ crew_id: number; name: string; join_policy: string; has_photo: boolean; photo_url: string | null; color: string }>(
+      `SELECT i.crew_id, c.name, c.join_policy, c.has_photo, c.photo_url, c.color FROM crew_invites i JOIN crews c ON c.id = i.crew_id
        WHERE i.invite_code = $1 AND i.revoked_at IS NULL AND i.expires_at > now() AND c.deleted_at IS NULL`,
       [code],
       db,
@@ -152,7 +154,7 @@ export class CrewsService {
               (SELECT count(*)::int FROM challenges WHERE crew_id = $1 AND status = 'active') AS active`,
       [inv.crew_id],
     );
-    return { crewId: inv.crew_id, name: inv.name, hasPhoto: inv.has_photo, color: inv.color, ...stats, joinPolicy: inv.join_policy };
+    return { crewId: inv.crew_id, name: inv.name, hasPhoto: inv.has_photo, photoUrl: inv.photo_url, color: inv.color, ...stats, joinPolicy: inv.join_policy };
   }
 
   async joinByCode(userId: number, code: string) {
@@ -190,7 +192,7 @@ export class CrewsService {
   async myCrews(userId: number) {
     const primary = await this.primaryCrewId(userId);
     const rows = await this.db.many(
-      `SELECT c.id, c.name, c.has_photo, c.color, c.home_region, m.role, m.record_color,
+      `SELECT c.id, c.name, c.has_photo, c.photo_url, c.color, c.home_region, m.role, m.record_color,
               (SELECT count(*)::int FROM crew_members x WHERE x.crew_id = c.id AND x.left_at IS NULL) AS members,
               ch.id AS challenge_id, ch.title AS challenge_title, ch.progress, ch.end_at
        FROM crew_members m JOIN crews c ON c.id = m.crew_id
@@ -211,6 +213,7 @@ export class CrewsService {
         id: r.id,
         name: r.name,
         hasPhoto: r.has_photo,
+        photoUrl: r.photo_url,
         color: r.color,
         region: r.home_region,
         role: r.role,
@@ -263,6 +266,7 @@ export class CrewsService {
       name: crew.name,
       intro: crew.intro,
       hasPhoto: crew.has_photo,
+      photoUrl: crew.photo_url,
       color: crew.color,
       region: crew.home_region,
       since: crew.created_at,
@@ -334,7 +338,14 @@ export class CrewsService {
     };
     if (b.name !== undefined) put('name', this.validateName(b.name));
     if (b.intro !== undefined) put('intro', String(b.intro).slice(0, 80));
-    if (b.hasPhoto !== undefined) put('has_photo', !!b.hasPhoto);
+    if (b.photoUrl !== undefined) {
+      const photo = photoUrlOf(b.photoUrl);
+      put('photo_url', photo);
+      put('has_photo', !!photo);
+    } else if (b.hasPhoto === false) {
+      put('photo_url', null);
+      put('has_photo', false);
+    }
     if (b.color !== undefined) put('color', String(b.color));
     if (b.region !== undefined) put('home_region', String(b.region));
     if (b.discoverable !== undefined) put('discoverable', !!b.discoverable);

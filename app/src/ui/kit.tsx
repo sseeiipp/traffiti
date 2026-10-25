@@ -4,6 +4,7 @@ import { Children, createContext, ReactNode, useContext, useRef, useState } from
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -781,24 +782,18 @@ export function Avatar({
   );
 }
 
-/** 크루 사진 자리(사진 업로드 연결 전이라 디자인의 풍경 일러스트를 쓴다) */
-export function CrewPhoto({ size = 44, radius = 12 }: { size?: number; radius?: number }) {
+/** 올린 사진. 주소가 없으면 빈 칸만 보인다 */
+export function CrewPhoto({ uri, size = 44, radius = 12 }: { uri?: string | null; size?: number; radius?: number }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden' }}>
-      <Svg viewBox="0 0 100 100" width={size} height={size} preserveAspectRatio="xMidYMid slice">
-        <Rect width={100} height={100} fill="#D6E8F5" />
-        <Circle cx={74} cy={26} r={10} fill="#FFFFFF" />
-        <Path d="M0 70 C20 52 40 58 56 66 C72 74 86 60 100 56 L100 100 L0 100 Z" fill="#9BC27A" />
-        <Path d="M8 100 C30 82 52 84 60 72 C66 64 78 64 90 60" fill="none" stroke="#FFFFFF" strokeWidth={6} strokeLinecap="round" />
-        <Path d="M8 100 C30 82 52 84 60 72 C66 64 78 64 90 60" fill="none" stroke="#65A30D" strokeWidth={2.5} strokeLinecap="round" strokeDasharray="1 5" />
-      </Svg>
+    <View style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden', backgroundColor: C.field }}>
+      {uri ? <Image source={{ uri }} style={{ width: size, height: size }} resizeMode="cover" /> : null}
     </View>
   );
 }
 
-export function CrewAvatar({ crew, size = 44, radius }: { crew: { name: string; hasPhoto?: boolean; color?: string }; size?: number; radius?: number }) {
+export function CrewAvatar({ crew, size = 44, radius }: { crew: { name: string; photoUrl?: string | null; color?: string }; size?: number; radius?: number }) {
   const r = radius ?? Math.round(size * 0.28);
-  if (crew.hasPhoto) return <CrewPhoto size={size} radius={r} />;
+  if (crew.photoUrl) return <CrewPhoto uri={crew.photoUrl} size={size} radius={r} />;
   const color = crew.color ?? C.lime;
   return <Avatar letter={crew.name.slice(0, 1)} color={color} ink={color === C.lime ? C.ink : '#FFFFFF'} size={size} radius={r} />;
 }

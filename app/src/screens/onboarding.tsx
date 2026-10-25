@@ -5,12 +5,13 @@ import { Linking, Platform, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '../api/client';
 import { useAction, useMe } from '../api/hooks';
+import { usePhotoPicker } from '../api/photo';
 import { SocialCancelled, socialCredential } from '../api/socialLogin';
 import { MapBackdrop } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { useAuth, type Provider } from '../store/auth';
 import { C, shadow } from '../theme';
-import { IcLocate, IcPlus, IcCamera } from '../ui/icons';
+import { IcLocate, IcPlus } from '../ui/icons';
 import {
   Btn,
   CheckCircle,
@@ -636,7 +637,8 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
   const [preview, setPreview] = useState<any>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [photo, setPhoto] = useState(false);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const picker = usePhotoPicker(setPhoto);
   const [area, setArea] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   // 주로 달리는 지역: 지금 위치와 주변 네 방향(약 1.5km)을 동 이름으로 바꿔 고른다
@@ -703,7 +705,7 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
     navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
   });
   const create = useAction(async () => {
-    const r = await api('/crews', { body: { name, hasPhoto: photo, region } });
+    const r = await api('/crews', { body: { name, photoUrl: photo, region } });
     await done(r.id);
     navigation.reset({ index: 1, routes: [{ name: 'Tabs' }, { name: 'CrewInvite', params: { crewId: r.id } }] });
   });
@@ -774,11 +776,11 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
             <Tap
-              onPress={() => setPhoto(!photo)}
+              onPress={picker.pick}
               label="크루 사진 선택"
               style={{ width: 84, height: 84, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', boxShadow: shadow.soft }}
             >
-              {photo ? <CrewPhoto size={84} radius={24} /> : <IcCamera size={30} color={C.sub} w={1.8} />}
+              {photo ? <CrewPhoto uri={photo} size={84} radius={24} /> : null}
               <View
                 style={{
                   position: 'absolute',
@@ -796,9 +798,16 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
                 <IcPlus size={14} w={3} />
               </View>
             </Tap>
-            <T size={16} weight="600" style={{ flex: 1 }}>
-              {photo ? '사진을 넣었어요' : '크루 사진 넣기'}
-            </T>
+            <View style={{ flex: 1, gap: 4 }}>
+              <T size={16} weight="600">
+                {picker.busy ? '사진을 올리는 중…' : photo ? '사진을 넣었어요' : '크루 사진 넣기'}
+              </T>
+              {picker.error ? (
+                <T size={13} color={C.danger}>
+                  {picker.error}
+                </T>
+              ) : null}
+            </View>
           </View>
           <Field label="크루 이름" value={name} onChangeText={(t) => setName(t.slice(0, 16))} />
           <View style={{ gap: 8 }}>

@@ -3,6 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, View } from 'react-native';
 import { api } from '../api/client';
+import { usePhotoPicker } from '../api/photo';
 import { useAction, useArtworks, useCrew, useCurrentCrewId, type CrewDetail } from '../api/hooks';
 import { RouteArt, ShapeGlyph } from '../map/MapArt';
 import type { P } from '../navigation/types';
@@ -228,25 +229,31 @@ export function CrewEdit({ navigation, route }: P<'CrewEdit'>) {
   const crew = useCrew(route.params.crewId);
   const [f, setF] = useState<Partial<CrewDetail> | null>(null);
   useEffect(() => {
-    if (crew.data && !f) setF({ name: crew.data.name, intro: crew.data.intro, hasPhoto: crew.data.hasPhoto, color: crew.data.color, discoverable: crew.data.discoverable });
+    if (crew.data && !f) setF({ name: crew.data.name, intro: crew.data.intro, photoUrl: crew.data.photoUrl, color: crew.data.color, discoverable: crew.data.discoverable });
   }, [crew.data, f]);
+  const picker = usePhotoPicker((url) => setF((cur) => ({ ...cur, photoUrl: url })));
   const save = useAction((b: Partial<CrewDetail>) => api(`/crews/${route.params.crewId}`, { method: 'PATCH', body: b }), [['crew'], ['crews']]);
   if (!crew.data || !f) return <Loading />;
   return (
     <Screen gap={16} footer={<Btn title="저장" loading={save.isPending} onPress={() => save.mutate(f, { onSuccess: () => navigation.goBack() })} />}>
       <NavBar onBack={() => navigation.goBack()} kind="close" title="크루 정보 편집" />
       <View style={{ alignItems: 'center', gap: 10 }}>
-        <Tap onPress={() => setF({ ...f, hasPhoto: true })} label="크루 사진 바꾸기" style={{ borderRadius: 28, boxShadow: '0 10px 28px rgba(0, 0, 0, 0.12)' }}>
-          {f.hasPhoto ? <CrewPhoto size={96} radius={28} /> : <CrewAvatar crew={{ name: f.name || '?', color: f.color }} size={96} radius={28} />}
+        <Tap onPress={picker.pick} label="크루 사진 바꾸기" style={{ borderRadius: 28, boxShadow: '0 10px 28px rgba(0, 0, 0, 0.12)' }}>
+          {f.photoUrl ? <CrewPhoto uri={f.photoUrl} size={96} radius={28} /> : <CrewAvatar crew={{ name: f.name || '?', color: f.color }} size={96} radius={28} />}
           <View style={{ position: 'absolute', right: -4, bottom: -4, width: 32, height: 32, borderRadius: 16, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 3px #FFFFFF' }}>
             <IcCamera size={16} />
           </View>
         </Tap>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Btn title="사진 선택" kind="secondary" height={36} textSize={14} onPress={() => setF({ ...f, hasPhoto: true })} />
-          {f.hasPhoto ? <Btn title="사진 지우기" kind="ghost" height={36} textSize={14} onPress={() => setF({ ...f, hasPhoto: false })} style={{ backgroundColor: 'transparent' }} /> : null}
+          <Btn title="사진 선택" kind="secondary" height={36} textSize={14} loading={picker.busy} onPress={picker.pick} />
+          {f.photoUrl ? <Btn title="사진 지우기" kind="ghost" height={36} textSize={14} onPress={() => setF({ ...f, photoUrl: null })} style={{ backgroundColor: 'transparent' }} /> : null}
         </View>
-        {!f.hasPhoto ? (
+        {picker.error ? (
+          <T size={13} color={C.danger}>
+            {picker.error}
+          </T>
+        ) : null}
+        {!f.photoUrl ? (
           <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', gap: 10 }}>
             {SWATCHES.map((s) => (
               <Pressable

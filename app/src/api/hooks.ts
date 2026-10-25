@@ -11,6 +11,7 @@ export interface Me {
   email: string | null;
   provider: 'email' | 'kakao' | 'naver' | 'google';
   hasPhoto: boolean;
+  photoUrl: string | null;
   settings: {
     region: string;
     regionAuto: boolean;
@@ -29,6 +30,7 @@ export interface CrewSummary {
   id: number;
   name: string;
   hasPhoto: boolean;
+  photoUrl: string | null;
   color: string;
   region: string;
   role: 'leader' | 'member';
@@ -60,6 +62,7 @@ export interface CrewDetail {
   name: string;
   intro: string;
   hasPhoto: boolean;
+  photoUrl: string | null;
   color: string;
   region: string;
   since: string;
@@ -174,6 +177,7 @@ export interface RankRow {
   name: string;
   color: string;
   hasPhoto: boolean;
+  photoUrl: string | null;
   members: number;
   level: number;
   mine: boolean;

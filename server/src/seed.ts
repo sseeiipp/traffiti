@@ -102,7 +102,7 @@ async function main() {
   }
 
   // ---- 성수 새벽런 (도윤의 대표 크루, 크루장 지우) ----
-  const ss = await crews.create(jiwoo, { name: '성수 새벽런', hasPhoto: true, region: '성동구 성수동' });
+  const ss = await crews.create(jiwoo, { name: '성수 새벽런', region: '성동구 성수동' });
   await db.pool.query(`UPDATE crews SET intro = '평일 새벽 6시, 성수동 골목을 함께 그려요.', created_at = '2026-09-01' WHERE id = $1`, [ss.id]);
   for (const u of [minho, seoyeon, doyun]) await crews.joinByCode(u, ss.inviteCode);
 

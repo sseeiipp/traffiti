@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
 import { hasBannedWord } from '../common/util.js';
+import { photoUrlOf } from '../images/images.controller.js';
 
 const SETTING_COLS: Record<string, string> = {
   region: 'region',
@@ -37,6 +38,7 @@ export class UsersService {
       email: u.email,
       provider: u.auth_provider,
       hasPhoto: !!u.profile_image_url,
+      photoUrl: (u.profile_image_url as string | null) ?? null,
       settings: {
         region: u.region ?? '성동구 성수동',
         regionAuto: u.region_auto ?? true,
@@ -52,15 +54,16 @@ export class UsersService {
     };
   }
 
-  async update(userId: number, b: { name?: string; hasPhoto?: boolean }) {
+  async update(userId: number, b: { name?: string; hasPhoto?: boolean; photoUrl?: string | null }) {
     if (b.name !== undefined) {
       const name = String(b.name).trim();
       if (!name || name.length > 10) throw new BadRequestException('이름은 1–10자예요.');
       await this.db.pool.query(`UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1`, [userId, name]);
     }
-    if (b.hasPhoto !== undefined) {
-      // 사진 업로드(오브젝트 스토리지) 연결 전이라 사진 유무만 저장한다
-      await this.db.pool.query(`UPDATE users SET profile_image_url = $2 WHERE id = $1`, [userId, b.hasPhoto ? 'placeholder' : null]);
+    if (b.photoUrl !== undefined) {
+      await this.db.pool.query(`UPDATE users SET profile_image_url = $2 WHERE id = $1`, [userId, photoUrlOf(b.photoUrl)]);
+    } else if (b.hasPhoto === false) {
+      await this.db.pool.query(`UPDATE users SET profile_image_url = NULL WHERE id = $1`, [userId]);
     }
     return this.me(userId);
   }

@@ -105,7 +105,7 @@ export class RankingsService {
     }
     const prev = monthly && category === 'all' ? await this.latest(type, prevMonthKey(periodKey), 'all') : null;
     const crews = await this.db.many(
-      `SELECT c.id, c.name, c.color, c.has_photo,
+      `SELECT c.id, c.name, c.color, c.has_photo, c.photo_url,
               (SELECT count(*)::int FROM crew_members m WHERE m.crew_id = c.id AND m.left_at IS NULL) AS members,
               (SELECT COALESCE(sum(xp_amount), 0)::int FROM crew_xp_transactions t WHERE t.crew_id = c.id) AS xp,
               EXISTS (SELECT 1 FROM crew_members m WHERE m.crew_id = c.id AND m.user_id = $1 AND m.left_at IS NULL) AS mine
@@ -124,6 +124,7 @@ export class RankingsService {
           name: c.name,
           color: c.color,
           hasPhoto: c.has_photo,
+          photoUrl: c.photo_url,
           members: c.members,
           level: levelOf(c.xp).level,
           mine: c.mine,

@@ -222,4 +222,17 @@ CREATE TABLE IF NOT EXISTS user_reports (
 );
 -- 크루가 이름으로 찾은 사람에게 보낸 초대(crew_join_requests.status = 'invited')는 한 사람당 하나
 CREATE UNIQUE INDEX IF NOT EXISTS crew_invited_once ON crew_join_requests (crew_id, user_id) WHERE status = 'invited';
+
+-- 프로필·크루 사진. 작게 줄인 JPEG를 DB에 바로 담고 /images/:id로 내보낸다
+CREATE TABLE IF NOT EXISTS images (
+  id SERIAL PRIMARY KEY,
+  owner_id INT REFERENCES users(id) ON DELETE SET NULL,
+  mime TEXT NOT NULL,
+  data BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE crews ADD COLUMN IF NOT EXISTS photo_url TEXT;
+-- 업로드 연결 전의 '사진 있음' 표시(예시 그림)는 실제 사진이 없으니 지운다
+UPDATE crews SET has_photo = false WHERE has_photo AND photo_url IS NULL;
+UPDATE users SET profile_image_url = NULL WHERE profile_image_url = 'placeholder';
 `;

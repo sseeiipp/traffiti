@@ -5,6 +5,7 @@ import { Platform, Pressable, TextInput, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { api } from '../api/client';
 import { useAction, useCrew, useMe, useMyCrews, type Me } from '../api/hooks';
+import { usePhotoPicker } from '../api/photo';
 import type { P } from '../navigation/types';
 import { useAuth } from '../store/auth';
 import { C, font } from '../theme';
@@ -13,6 +14,7 @@ import {
   Avatar,
   Btn,
   CheckCircle,
+  CrewPhoto,
   ErrorText,
   Field,
   Glass,
@@ -187,7 +189,9 @@ export function ProfileEdit({ navigation }: P<'ProfileEdit'>) {
   const me = useMe();
   const crews = useMyCrews();
   const [name, setName] = useState<string | null>(null);
-  const [photo, setPhoto] = useState<boolean | null>(null);
+  // undefined: 그대로, null: 지우기, 문자열: 새로 올린 사진
+  const [photo, setPhoto] = useState<string | null | undefined>(undefined);
+  const picker = usePhotoPicker(setPhoto);
   const [sel, setSel] = useState<number | null>(null);
   const [colors, setColors] = useState<Record<number, string>>({});
   const [marks, setMarks] = useState<Record<number, [number, number]>>({});
@@ -202,7 +206,7 @@ export function ProfileEdit({ navigation }: P<'ProfileEdit'>) {
   const taken = useMemo(() => (detail.data?.members ?? []).filter((m) => !m.isMe), [detail.data]);
 
   const save = useAction(async () => {
-    await api('/users/me', { method: 'PATCH', body: { name: name ?? undefined, hasPhoto: photo ?? undefined } });
+    await api('/users/me', { method: 'PATCH', body: { name: name ?? undefined, photoUrl: photo } });
     for (const c of crews.data?.crews ?? []) {
       if (colors[c.id] && colors[c.id] !== c.myColor) await api(`/crews/${c.id}/me`, { method: 'PATCH', body: { color: colors[c.id] } });
     }
@@ -213,7 +217,7 @@ export function ProfileEdit({ navigation }: P<'ProfileEdit'>) {
 
   if (!me.data || !crews.data || crewId == null) return <Loading />;
   const nm = name ?? me.data.name;
-  const hasPhoto = photo ?? me.data.hasPhoto;
+  const photoUrl = photo === undefined ? me.data.photoUrl : photo;
   const cur = colors[crewId] ?? '#7A5AF8';
   const crewName = crews.data.crews.find((c) => c.id === crewId)?.name ?? '';
   const mark = marks[crewId] ?? [50, 40];
@@ -235,25 +239,23 @@ export function ProfileEdit({ navigation }: P<'ProfileEdit'>) {
     <Screen gap={14} footer={<Btn title="저장" loading={save.isPending} onPress={() => save.mutate(undefined)} />}>
       <NavBar onBack={() => navigation.goBack()} kind="close" title="프로필 편집" />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-        <Tap onPress={() => setPhoto(true)} label="프로필 사진 바꾸기" style={{ width: 72, height: 72, borderRadius: 36, boxShadow: '0 8px 22px rgba(0, 0, 0, 0.12)' }}>
-          {hasPhoto ? (
-            <Svg viewBox="0 0 100 100" width={72} height={72} style={{ borderRadius: 36 }}>
-              <Rect width={100} height={100} rx={50} fill="#E8E0FF" />
-              <Path d="M33 40 a17 17 0 1 0 34 0 a17 17 0 1 0 -34 0" fill="#B9A6FB" />
-              <Path d="M16 100 C20 74 34 64 50 64 C66 64 80 74 84 100 Z" fill="#B9A6FB" />
-            </Svg>
-          ) : (
-            <Avatar letter={nm.trim().slice(0, 1) || '?'} color={cur} size={72} />
-          )}
+        <Tap onPress={picker.pick} label="프로필 사진 바꾸기" style={{ width: 72, height: 72, borderRadius: 36, boxShadow: '0 8px 22px rgba(0, 0, 0, 0.12)' }}>
+          {/* 사진이 없으면 빈 원만 둔다 */}
+          <CrewPhoto uri={photoUrl} size={72} radius={36} />
           <View style={{ position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 3px #FFFFFF' }}>
             <IcCamera />
           </View>
         </Tap>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Btn title="사진 선택" kind="secondary" height={36} textSize={14} onPress={() => setPhoto(true)} />
-          {hasPhoto ? <Btn title="사진 지우기" kind="ghost" height={36} textSize={14} onPress={() => setPhoto(false)} style={{ backgroundColor: 'transparent' }} /> : null}
+          <Btn title="사진 선택" kind="secondary" height={36} textSize={14} loading={picker.busy} onPress={picker.pick} />
+          {photoUrl ? <Btn title="사진 지우기" kind="ghost" height={36} textSize={14} onPress={() => setPhoto(null)} style={{ backgroundColor: 'transparent' }} /> : null}
         </View>
       </View>
+      {picker.error ? (
+        <T size={13} color={C.danger}>
+          {picker.error}
+        </T>
+      ) : null}
       <Field
         label="크루에서 쓸 이름"
         right={

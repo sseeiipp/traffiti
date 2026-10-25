@@ -57,6 +57,14 @@
       ],
       "expo-sharing",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "프로필과 크루 사진을 고르기 위해 사진첩을 사용해요.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-media-library",
         {
           "savePhotosPermission": "작품 이미지를 사진첩에 저장하기 위해 사용해요.",

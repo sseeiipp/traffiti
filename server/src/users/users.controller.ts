@@ -15,7 +15,7 @@ export class UsersController {
   }
 
   @Patch()
-  update(@CurrentUser() u: AuthUser, @Body() b: { name?: string; hasPhoto?: boolean }) {
+  update(@CurrentUser() u: AuthUser, @Body() b: { name?: string; hasPhoto?: boolean; photoUrl?: string | null }) {
     return this.users.update(u.id, b);
   }
 
