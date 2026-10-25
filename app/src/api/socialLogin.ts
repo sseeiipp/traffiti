@@ -31,12 +31,24 @@ export async function socialCredential(provider: Provider, deviceId: string): Pr
   if (!on.real) return demo;
 
   const returnUrl = Linking.createURL('oauth');
-  const res = await WebBrowser.openAuthSessionAsync(
-    `${API_URL}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(returnUrl)}`,
-    returnUrl,
-  );
-  if (res.type !== 'success') throw new SocialCancelled();
-  const q = Linking.parse(res.url).queryParams ?? {};
+  // 안드로이드에서 앱이 앞으로 오면서 로그인 창이 '닫힘'으로 먼저 끝나 버리는 경우가 있어, 들어온 주소를 따로도 받아 둔다
+  let arrived: string | null = null;
+  const sub = Linking.addEventListener('url', (e) => {
+    if (e.url.startsWith(returnUrl)) arrived = e.url;
+  });
+  let url: string | null;
+  try {
+    const res = await WebBrowser.openAuthSessionAsync(
+      `${API_URL}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(returnUrl)}`,
+      returnUrl,
+    );
+    if (res.type !== 'success') await new Promise((r) => setTimeout(r, 500));
+    url = res.type === 'success' ? res.url : arrived;
+  } finally {
+    sub.remove();
+  }
+  if (!url) throw new SocialCancelled();
+  const q = Linking.parse(url).queryParams ?? {};
   if (typeof q.ticket === 'string' && q.ticket) return { ticket: q.ticket };
   if (q.error === 'cancelled') throw new SocialCancelled();
   console.warn(`[social] ${provider} 실제 로그인 실패(${q.error}), 데모 로그인으로 진행`);

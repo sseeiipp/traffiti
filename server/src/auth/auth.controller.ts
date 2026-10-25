@@ -15,17 +15,23 @@ import { authorizeUrl, fetchProfile, isAllowedReturn, isConfigured, OAUTH_PROVID
  * 막히면 사용자가 버튼을 눌러 돌아가게 한다.
  */
 function backToApp(res: Response, url: string) {
-  const href = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  // 삼성 인터넷 탭은 travity:// 같은 앱 주소를 눌러도 앱을 안 여는 경우가 있어,
+  // 안드로이드에서는 어느 앱을 열지 패키지까지 적은 intent:// 주소를 쓴다
+  const m = /^(travity|exps?):\/\/(.*)$/.exec(url);
+  const pkg = m?.[1] === 'travity' ? 'com.travity.app' : 'host.exp.exponent';
+  const intent = m ? `intent://${m[2].replace(/#/g, '%23')}#Intent;scheme=${m[1]};package=${pkg};end` : url;
+  const href = esc(url);
   res
     .status(200)
     .type('html')
     .set('cache-control', 'no-store')
     .send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Traffiti로 돌아가기</title><meta http-equiv="refresh" content="0;url=${href}">
+<title>Traffiti로 돌아가기</title>
 <style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;font-family:system-ui,sans-serif;background:#fff;color:#111}
 a{display:block;padding:16px 32px;border-radius:999px;background:#A3E635;color:#111;font-weight:700;font-size:17px;text-decoration:none}p{margin:0;color:#666;font-size:15px}</style></head>
 <body><p>앱으로 돌아가는 중이에요</p><a id="go" href="${href}">앱으로 돌아가기</a>
-<script>location.replace(document.getElementById('go').href)</script></body></html>`);
+<script>var a=document.getElementById('go');if(/Android/i.test(navigator.userAgent))a.href=${JSON.stringify(intent).replace(/</g, '\\u003c')};location.href=a.href</script></body></html>`);
 }
 
 /** 시연 중 소셜 로그인이 어디서 끊기는지 보려고 남기는 최근 기록(토큰·회원 번호는 넣지 않는다) */
