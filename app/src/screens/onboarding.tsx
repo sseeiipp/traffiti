@@ -33,6 +33,7 @@ import {
   Tap,
   TextLink,
   useBottom,
+  useFloatBottom,
 } from '../ui/kit';
 import { HeroMap } from './common';
 
@@ -104,6 +105,7 @@ export function Intro() {
 // ---------- 02 위치 권한 설정 안내 ----------
 
 export function LocationNeeded({ navigation }: P<'LocationNeeded'>) {
+  const fb = useFloatBottom();
   return (
     <View style={{ flex: 1 }}>
       <Svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFill}>
@@ -125,7 +127,7 @@ export function LocationNeeded({ navigation }: P<'LocationNeeded'>) {
           position: 'absolute',
           left: 10,
           right: 10,
-          bottom: 10,
+          bottom: fb,
           borderRadius: 36,
           backgroundColor: 'rgba(255, 255, 255, 0.94)',
           paddingTop: 10,

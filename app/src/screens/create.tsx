@@ -64,6 +64,7 @@ import {
   Tap,
   TextLink,
   useBottom,
+  useFloatBottom,
   useTop,
 } from "../ui/kit";
 import { fmtKm, kmParts, md, Measure, pct } from "./common";
@@ -1326,6 +1327,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
   // 지도는 화면 전체 배경. 경로는 위 버튼과 아래 시트 사이에 맞춘다
   const { width: W, height: H } = useWindowDimensions();
   const [sheetH, setSheetH] = useState(0);
+  const fb = useFloatBottom();
   return (
     <View style={{ flex: 1, backgroundColor: C.map.land }}>
       <View style={StyleSheet.absoluteFill}>
@@ -1344,14 +1346,18 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
             seed={2}
           />
         ) : (
-          <Svg
-            width={W}
-            height={H}
-            viewBox="0 0 390 844"
-            preserveAspectRatio="xMidYMid slice"
-          >
-            <MapBackdrop w={390} h={844} seed={2} />
-          </Svg>
+          // 경로를 찾는 중이거나 못 찾았을 때도 출발 지점 주변 실제 지도를 보여 준다
+          <RouteArt
+            route={[draft.start, draft.start]}
+            w={W}
+            h={H}
+            insetTop={top + 48}
+            insetBottom={sheetH}
+            mode="target"
+            showStart
+            interactive
+            seed={2}
+          />
         )}
       </View>
       <RoundBtn
@@ -1400,9 +1406,9 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
         </View>
       </Glass>
       <View
-        style={{ position: "absolute", left: 10, right: 10, bottom: 10 }}
+        style={{ position: "absolute", left: 10, right: 10, bottom: fb }}
         onLayout={(e) =>
-          setSheetH(Math.round(e.nativeEvent.layout.height) + 10)
+          setSheetH(Math.round(e.nativeEvent.layout.height) + fb)
         }
       >
         <Glass
@@ -1411,13 +1417,16 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
           style={{
             borderRadius: 36,
             backgroundColor: "rgba(255, 255, 255, 0.94)",
-            paddingTop: 22,
-            paddingHorizontal: 18,
-            paddingBottom: 20,
-            gap: 16,
+            maxHeight: H - top - 64 - fb,
             boxShadow: shadow.sheet,
           }}
         >
+          {/* 선택지가 많아 화면보다 길어지면 시트 안에서 스크롤한다 */}
+          <ScrollView
+            style={{ flexGrow: 0 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingTop: 22, paddingHorizontal: 18, paddingBottom: 20, gap: 16 }}
+          >
           {!located || q.isLoading ? (
             <View style={{ gap: 18 }}>
               <View style={{ gap: 4 }}>
@@ -1564,6 +1573,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
               ))}
             </View>
           )}
+          </ScrollView>
         </Glass>
       </View>
     </View>

@@ -611,6 +611,10 @@ export function useBottom() {
   const ins = useSafeAreaInsets();
   return Math.max(34, ins.bottom + 12);
 }
+/** 화면 아래에 떠 있는 시트의 아래 여백. 안드로이드 내비게이션 바(버튼 3개) 위로 띄운다 */
+export function useFloatBottom(gap = 10) {
+  return gap + useSafeAreaInsets().bottom;
+}
 
 /** 768px 이상(넓은 화면): 하단 메뉴가 왼쪽 세로 메뉴로, 탭 화면은 2열, 폼·흐름 화면은 가운데 600px */
 export const WIDE = 768;
@@ -733,8 +737,11 @@ export function NavBar({ onBack, kind = 'back', title, right, step }: { onBack?:
 /** 아래에서 올라오는 유리 시트(모달) */
 export function Sheet({ open, onClose, children, inset = 10, radius = 32 }: { open: boolean; onClose: () => void; children: ReactNode; inset?: number; radius?: number }) {
   // 모달이라 하단 메뉴 위로 덮는다. 넓은 화면에서는 가운데 600px
+  // 화면 끝까지 덮고 내비게이션 바만큼 띄우며, 시트가 화면보다 길면 안에서 스크롤한다
+  const ins = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(21, 23, 28, 0.25)' }]} onPress={onClose} accessibilityLabel="닫기" />
       <View pointerEvents="box-none" style={{ flex: 1, alignItems: 'center' }}>
         <View pointerEvents="box-none" style={{ flex: 1, width: '100%', maxWidth: FORM_MAX + inset * 2 }}>
@@ -744,18 +751,17 @@ export function Sheet({ open, onClose, children, inset = 10, radius = 32 }: { op
               position: 'absolute',
               left: inset,
               right: inset,
-              bottom: inset,
+              bottom: inset + ins.bottom,
+              maxHeight: height - ins.top - ins.bottom - inset - 24,
               borderRadius: radius,
               backgroundColor: 'rgba(255, 255, 255, 0.94)',
-              paddingTop: 10,
-              paddingHorizontal: 18,
-              paddingBottom: 22,
-              gap: 14,
               boxShadow: shadow.sheet,
             }}
           >
-            <Handle />
-            {children}
+            <ScrollView style={{ flexGrow: 0 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: 10, paddingHorizontal: 18, paddingBottom: 22, gap: 14 }}>
+              <Handle />
+              {children}
+            </ScrollView>
           </Glass>
         </View>
       </View>

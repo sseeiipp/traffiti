@@ -52,6 +52,7 @@ import {
   Tap,
   Toggle,
   useBottom,
+  useFloatBottom,
   useWide,
 } from '../ui/kit';
 import { fmtKm, kmParts, md, Measure, pct, ymd } from './common';
@@ -1183,6 +1184,7 @@ export function ShapeBook({ navigation }: P<'ShapeBook'>) {
 // ---------- 23 챌린지 중단 · 미완료 보관 ----------
 
 export function ChallengeStop({ navigation, route }: P<'ChallengeStop'>) {
+  const fb = useFloatBottom();
   const qc = useQueryClient();
   const ch = useChallenge(route.params.challengeId);
   const stop = useAction(async () => {
@@ -1202,7 +1204,7 @@ export function ChallengeStop({ navigation, route }: P<'ChallengeStop'>) {
           position: 'absolute',
           left: 10,
           right: 10,
-          bottom: 10,
+          bottom: fb,
           borderRadius: 36,
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           paddingTop: 10,
