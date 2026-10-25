@@ -40,7 +40,7 @@ const env = {
 };
 console.log(`\n  PC IP ${ip} · API ${api} · GPS ${sim ? '시뮬레이션' : '실제'} · ${tunnel ? 'Expo 터널' : '같은 Wi-Fi'}`);
 console.log('  휴대폰에서 Expo Go 앱을 열고 아래 QR을 찍으세요(iPhone은 기본 카메라로 찍어도 돼요).');
-console.log(`  휴대폰 브라우저에서 http://${ip}:3000/health 가 {"ok":true}면 API 연결은 된 거예요.\n`);
+console.log(`  휴대폰 브라우저에서 ${api}/health 가 {"ok":true}면 API 연결은 된 거예요.\n`);
 // Windows에서 npx는 .cmd라 셸로 띄운다(인자는 고정 문자열)
 const child = spawn(`npx expo start ${tunnel ? '--tunnel' : '--lan'} --go --clear`, { env, stdio: 'inherit', shell: true });
 child.on('exit', (code) => process.exit(code ?? 0));
