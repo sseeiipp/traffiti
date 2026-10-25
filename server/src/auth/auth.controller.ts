@@ -28,6 +28,13 @@ a{display:block;padding:16px 32px;border-radius:999px;background:#A3E635;color:#
 <script>location.replace(document.getElementById('go').href)</script></body></html>`);
 }
 
+/** 시연 중 소셜 로그인이 어디서 끊기는지 보려고 남기는 최근 기록(토큰·회원 번호는 넣지 않는다) */
+const trace: { at: string; p: string; step: string; detail?: string }[] = [];
+function note(p: string, step: string, detail?: string) {
+  trace.unshift({ at: new Date().toISOString(), p, step, detail: detail?.slice(0, 200) });
+  trace.length = Math.min(trace.length, 30);
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -63,6 +70,12 @@ export class AuthController {
     };
   }
 
+  @Public()
+  @Get('oauth/recent')
+  recent() {
+    return trace;
+  }
+
   /** 앱이 브라우저로 여는 주소. 제공자 로그인 화면으로 보낸다 */
   @Public()
   @Get('oauth/:provider/start')
@@ -71,6 +84,7 @@ export class AuthController {
       return res.status(400).send('지원하지 않는 로그인 방식이에요.');
     }
     if (!redirect || !isAllowedReturn(redirect)) return res.status(400).send('돌아갈 앱 주소가 올바르지 않아요.');
+    note(p, 'start', redirect.split('?')[0]);
     const state = this.jwt.sign({ typ: 'oauth', p, r: redirect }, { expiresIn: '10m' });
     return res.redirect(302, authorizeUrl(p as OAuthProvider, state));
   }
@@ -88,9 +102,11 @@ export class AuthController {
       st = this.jwt.verify(q.state ?? '');
       if (st.typ !== 'oauth' || st.p !== p || !isAllowedReturn(st.r)) throw new Error();
     } catch {
+      note(p, 'callback-bad-state');
       return res.status(400).send('로그인 시간이 지났어요. 앱에서 다시 시도해 주세요.');
     }
     this.oauthLog.log(`${p} callback ${q.code ? 'code' : `error=${q.error}`}`);
+    note(p, 'callback', q.code ? 'code' : `error=${q.error} ${q.error_description ?? ''}`);
     if (q.error || !q.code) {
       // 사용자가 동의 화면에서 취소한 경우도 여기로 온다
       return backToApp(res, withQuery(st.r, { error: q.error === 'access_denied' ? 'cancelled' : (q.error ?? 'no_code') }));
@@ -98,9 +114,11 @@ export class AuthController {
     try {
       const prof = await fetchProfile(p as OAuthProvider, q.code, q.state!);
       const ticket = this.jwt.sign({ typ: 'social', p, s: prof.subject, n: prof.name }, { expiresIn: '30m' });
+      note(p, 'profile-ok', prof.name ? 'with name' : 'no name');
       return backToApp(res, withQuery(st.r, { ticket }));
     } catch (e) {
       this.oauthLog.warn(`${p} 로그인 실패: ${(e as Error).message}`);
+      note(p, 'profile-fail', (e as Error).message);
       return backToApp(res, withQuery(st.r, { error: 'provider' }));
     }
   }
