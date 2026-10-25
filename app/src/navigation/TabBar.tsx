@@ -29,7 +29,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     // 넓은 화면: 왼쪽 가운데 세로 메뉴, 선택 탭은 라임 배경
     return (
       <View pointerEvents="box-none" style={{ position: 'absolute', left: 20, top: 0, bottom: 0, justifyContent: 'center' }}>
-        <Glass kind="sheet" style={{ width: 84, borderRadius: 28, backgroundColor: 'rgba(255, 255, 255, 0.62)', paddingVertical: 8, paddingHorizontal: 6, gap: 2 }}>
+        <Glass kind="sheet" style={{ width: 84, borderRadius: 28, backgroundColor: 'rgba(255, 255, 255, 0.9)', paddingVertical: 8, paddingHorizontal: 6, gap: 2 }}>
           {ITEMS.map((it, i) => (
             <View
               key={it.name}
@@ -50,7 +50,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
   const cell = (w - 12) / 4;
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(24, ins.bottom + 4) }}>
-      <Glass kind="sheet" style={{ height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 255, 255, 0.62)', paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center' }}>
+      <Glass kind="sheet" style={{ height: 64, borderRadius: 32, backgroundColor: 'rgba(255, 255, 255, 0.9)', paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flex: 1, flexDirection: 'row' }} onLayout={(e) => setW(e.nativeEvent.layout.width + 12)}>
           {w > 0 ? (
             <Animated.View

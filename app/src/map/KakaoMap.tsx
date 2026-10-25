@@ -36,8 +36,11 @@ function update(d){
   if(d.start)dot(d.start,'${C.ink}',7,false);
   if(d.me)dot(d.me.pos,d.me.color,8,true);
   if(d.fitKey!==fitKey&&d.bounds.length){
-    fitKey=d.fitKey;var b=new kakao.maps.LatLngBounds();d.bounds.forEach(function(p){b.extend(ll(p))});
-    map.setBounds(b,d.pad,d.pad,d.pad,d.pad);
+    fitKey=d.fitKey;map.relayout();
+    var one=d.bounds.every(function(p){return p[0]===d.bounds[0][0]&&p[1]===d.bounds[0][1]});
+    if(one){map.setLevel(4);map.setCenter(ll(d.bounds[0]));map.panBy(0,(d.insetBottom-d.insetTop)/2)}
+    else{var b=new kakao.maps.LatLngBounds();d.bounds.forEach(function(p){b.extend(ll(p))});
+      map.setBounds(b,d.pad+d.insetTop,d.pad,d.pad+d.insetBottom,d.pad)}
   }
 }
 window.update=update;
@@ -53,7 +56,7 @@ type Line = { pts: LatLng[]; color: string; w: number; op: number; dash: boolean
 
 /** RouteArt와 같은 규칙으로 구간을 색별로 묶는다 */
 function build(p: RouteArtProps) {
-  const { route, segments, mode = 'progress', stroke = 6, trail, me, showStart, hideRemaining, pad = 24 } = p;
+  const { route, segments, mode = 'progress', stroke = 6, trail, me, showStart, hideRemaining, pad = 24, insetTop = 0, insetBottom = 0 } = p;
   const lines: Line[] = [];
   if (mode === 'target') lines.push({ pts: route, color: C.target, w: 3, op: 1, dash: true });
   else if (mode === 'route') lines.push({ pts: route, color: C.ink, w: stroke - 1, op: 1, dash: false });
@@ -69,13 +72,14 @@ function build(p: RouteArtProps) {
   }
   if (trail && trail.points.length > 1) lines.push({ pts: trail.points, color: trail.color, w: stroke + 1, op: 1, dash: false });
   const bounds = trail ? [...route, ...trail.points] : route;
-  const fitKey = `${route.length}:${route[0]?.join()}:${route[route.length - 1]?.join()}`;
-  return { lines, start: showStart ? route[0] ?? null : null, me: me ?? null, bounds, fitKey, pad };
+  // 시트 높이가 바뀌어도 다시 맞춘다
+  const fitKey = `${route.length}:${route[0]?.join()}:${route[route.length - 1]?.join()}:${insetTop}:${insetBottom}`;
+  return { lines, start: showStart ? route[0] ?? null : null, me: me ?? null, bounds, fitKey, pad, insetTop, insetBottom };
 }
 
 export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'fail'>('loading');
-  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad]);
+  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom]);
   const page = useMemo(() => html(KAKAO_JS_KEY), []);
   const web = useRef<WebViewHandle>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);

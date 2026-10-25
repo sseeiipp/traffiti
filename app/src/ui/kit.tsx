@@ -37,6 +37,11 @@ type TProps = {
   numberOfLines?: number;
 };
 
+const ANDROID_FONT: Record<NonNullable<TProps['weight']>, string> | null =
+  Platform.OS === 'android'
+    ? { '400': 'NotoSansKR_400Regular', '500': 'NotoSansKR_500Medium', '600': 'NotoSansKR_600SemiBold', '700': 'NotoSansKR_700Bold', '800': 'NotoSansKR_700Bold' }
+    : null;
+
 export function T({ children, size = 15, weight = '400', color = C.ink, rounded, lh, center, ls, style, numberOfLines }: TProps) {
   return (
     <Text
@@ -44,9 +49,10 @@ export function T({ children, size = 15, weight = '400', color = C.ink, rounded,
       style={[
         {
           fontSize: size,
-          fontWeight: weight,
+          // 안드로이드는 시스템 한글 글꼴 대신 Noto Sans KR을 굵기별 파일로 쓴다
+          fontWeight: ANDROID_FONT ? undefined : weight,
           color,
-          fontFamily: rounded ? font.rounded : font.text,
+          fontFamily: ANDROID_FONT ? ANDROID_FONT[weight] : rounded ? font.rounded : font.text,
           lineHeight: lh ? Math.round(size * lh) : undefined,
           textAlign: center ? 'center' : undefined,
           letterSpacing: ls != null ? ls * size : undefined,
@@ -114,7 +120,7 @@ export function Tap({
 
 // ---------- 유리 ----------
 
-/** 리퀴드 글래스: 흰 60% + 흐림. sheet는 흰 78% + 더 강한 흐림 */
+/** 리퀴드 글래스: 흰 88% + 흐림. sheet는 흰 94% + 더 강한 흐림 */
 export function Glass({
   children,
   style,
@@ -129,7 +135,7 @@ export function Glass({
   const nested = useContext(InGlass);
   const flat = StyleSheet.flatten(style) ?? {};
   const radius = flat.borderRadius ?? 20;
-  const bg = kind === 'lime' ? C.limeGlass : kind === 'sheet' ? 'rgba(255, 255, 255, 0.78)' : 'rgba(255, 255, 255, 0.6)';
+  const bg = kind === 'lime' ? C.limeGlass : kind === 'sheet' ? 'rgba(255, 255, 255, 0.94)' : 'rgba(255, 255, 255, 0.88)';
   return (
     <View
       style={[
@@ -736,7 +742,8 @@ export function Sheet({ open, onClose, children, inset = 10, radius = 32 }: { op
   );
 }
 
-export const Handle = () => <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#C7C7CC' }} />;
+/** 시트 위 회색 손잡이는 디자인에서 뺐다. 자리만 남겨 둔다 */
+export const Handle = () => null;
 
 // ---------- 표시 ----------
 

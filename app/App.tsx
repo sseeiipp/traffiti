@@ -1,5 +1,12 @@
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  NotoSansKR_400Regular,
+  NotoSansKR_500Medium,
+  NotoSansKR_600SemiBold,
+  NotoSansKR_700Bold,
+  useFonts,
+} from '@expo-google-fonts/noto-sans-kr';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
@@ -27,6 +34,11 @@ function useWebFonts() {
 
 export default function App() {
   useWebFonts();
+  // 안드로이드 기본 한글 글꼴은 디자인과 달라서 Noto Sans KR을 싣는다(글꼴 이름은 kit의 T와 맞춘다)
+  const [fontsReady] = useFonts(
+    Platform.OS === 'android' ? { NotoSansKR_400Regular, NotoSansKR_500Medium, NotoSansKR_600SemiBold, NotoSansKR_700Bold } : {},
+  );
+  if (!fontsReady) return null;
   // 화면 크기 대응은 화면 안에서 한다(320~430px 폰은 꽉 채움, 768px 이상은 세로 메뉴·2열·가운데 600px)
   return (
     <SafeAreaProvider>

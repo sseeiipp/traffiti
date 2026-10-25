@@ -84,6 +84,9 @@ export interface RouteArtProps {
   showStart?: boolean;
   /** 남은 구간 점선 숨기기(공유 이미지) */
   hideRemaining?: boolean;
+  /** 지도가 화면을 꽉 채울 때 위·아래에 떠 있는 요소 높이. 경로를 그 사이에 맞춘다(카카오맵만) */
+  insetTop?: number;
+  insetBottom?: number;
 }
 
 /** 지도 바탕이 필요하면 카카오맵, 키가 없거나 불러오지 못하면 단순화한 SVG 지도 */

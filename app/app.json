@@ -43,7 +43,8 @@
         {
           "locationWhenInUsePermission": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "travity",
     "extra": {

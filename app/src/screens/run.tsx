@@ -238,7 +238,7 @@ export function Running({ navigation, route }: P<'Running'>) {
           />
         )}
       </Measure>
-      <Glass style={{ position: 'absolute', left: 16, top: top + 4, height: 44, paddingLeft: 12, paddingRight: 16, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.72)', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Glass style={{ position: 'absolute', left: 16, top: top + 4, height: 44, paddingLeft: 12, paddingRight: 16, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.92)', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: paused ? C.sub3 : C.limeEdge, boxShadow: `0 0 0 4px ${paused ? 'rgba(174, 174, 178, 0.25)' : 'rgba(132, 204, 22, 0.25)'}` }} />
         <T size={15} weight="600">
           {paused ? '잠시 쉬는 중' : '달리는 중'}
