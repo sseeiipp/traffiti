@@ -1,0 +1,54 @@
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
+export type Stack = {
+  Onboard: undefined;
+  Intro: undefined;
+  LocationNeeded: { then?: 'run' } | undefined;
+  AuthStart: undefined;
+  Login: undefined;
+  Terms: undefined;
+  TermsDetail: { doc: 'tos' | 'loc' | 'mkt' };
+  Signup: undefined;
+  PasswordReset: undefined;
+  CrewSetup: { mode?: 'join' | 'create' } | undefined;
+  Tabs: undefined;
+  MySettings: undefined;
+  ProfileEdit: undefined;
+  PrivacyScope: undefined;
+  AccountDelete: undefined;
+  CreateMethod: undefined;
+  CourseSelect: undefined;
+  DrawMap: undefined;
+  Sketchbook: undefined;
+  AreaPick: undefined;
+  RouteReview: undefined;
+  ChallengeShare: undefined;
+  FriendRun: undefined;
+  FriendToCrew: { challengeId: number };
+  ChallengeJoin: { challengeId: number };
+  Running: { challengeId: number | null };
+  Recovery: undefined;
+  RunSaved: { runId: number };
+  CustomCategory: { challengeId: number };
+  CrewRanking: undefined;
+  CrewProfile: { crewId: number };
+  Artwork: { challengeId: number };
+  ShareSheet: { challengeId: number };
+  ShapeBook: undefined;
+  ChallengeStop: { challengeId: number };
+  RunDetail: { runId: number };
+  CrewSwitcher: undefined;
+  CrewManage: { crewId?: number } | undefined;
+  CrewEdit: { crewId: number };
+  CrewMembers: { crewId: number };
+  CrewInvite: { crewId: number };
+  UserSearch: { crewId: number };
+  UserProfile: { userId: number };
+  CrewLeave: { crewId: number; delete?: boolean };
+  CrewSettings: { crewId: number };
+  CrewLevel: { crewId: number };
+};
+
+export type Tabs = { Home: undefined; Calendar: undefined; Gallery: undefined; CrewResult: undefined };
+
+export type P<K extends keyof Stack> = NativeStackScreenProps<Stack, K>;

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "트래비티",
+    "slug": "travity",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.travity.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "package": "com.travity.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "트래비티",
+      "shortName": "트래비티",
+      "themeColor": "#A3E635",
+      "backgroundColor": "#FFFFFF"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요."
+        }
+      ]
+    ],
+    "scheme": "travity"
+  }
+}
