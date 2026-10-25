@@ -22,4 +22,15 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   // 제공자 토큰 검증을 붙이기 전까지의 데모 소셜 로그인. 배포에서는 기본으로 꺼진다
   socialLoginDemo: process.env.SOCIAL_LOGIN_DEMO ? process.env.SOCIAL_LOGIN_DEMO === 'true' : !prod,
+  // 소셜 제공자가 돌려보낼 이 서버의 바깥 주소. Railway는 RAILWAY_PUBLIC_DOMAIN을 넣어 준다
+  publicUrl: (
+    process.env.PUBLIC_URL ??
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${process.env.PORT ?? 3000}`)
+  ).replace(/\/$/, ''),
+  // 키가 있는 제공자만 실제 로그인을 연다. 없으면 앱이 데모 로그인으로 넘어간다
+  oauth: {
+    kakao: { id: process.env.KAKAO_REST_API_KEY ?? '', secret: process.env.KAKAO_CLIENT_SECRET ?? '' },
+    naver: { id: process.env.NAVER_CLIENT_ID ?? '', secret: process.env.NAVER_CLIENT_SECRET ?? '' },
+    google: { id: process.env.GOOGLE_CLIENT_ID ?? '', secret: process.env.GOOGLE_CLIENT_SECRET ?? '' },
+  },
 };

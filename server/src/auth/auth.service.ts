@@ -77,22 +77,36 @@ export class AuthService {
   }
 
   /**
-   * 소셜 로그인. 실제 서비스에서는 각 제공자의 토큰을 서버에서 검증해 subject를 얻어야 한다.
-   * 개발자 콘솔 등록 전이라 지금은 데모 모드로, 클라이언트가 보낸 기기 식별자를 subject로 쓴다.
-   * 배포(NODE_ENV=production)에서는 SOCIAL_LOGIN_DEMO=true를 주지 않는 한 막힌다.
+   * 소셜 로그인 표(ticket)나 데모 식별자에서 subject를 얻는다.
+   * ticket은 서버가 제공자에게 직접 받아 서명한 것이라 믿을 수 있다(oauth.ts).
+   * 데모 모드(SOCIAL_LOGIN_DEMO)에서는 기기 식별자를 subject로 받되, 실제 회원 번호와 겹치지 않게
+   * 'kakao:device-…'처럼 제공자 이름이 앞에 붙은 값만 받는다.
    */
-  async social(provider: Provider, subject: string, signup?: { name: string; terms: any }) {
-    if (!config.socialLoginDemo) {
-      throw new BadRequestException('소셜 로그인 설정이 아직 끝나지 않았어요.');
+  private socialSubject(provider: Provider, cred: { ticket?: string; subject?: string }): { subject: string; name?: string } {
+    if (cred.ticket) {
+      try {
+        const t = this.jwt.verify<{ typ: string; p: string; s: string; n?: string }>(cred.ticket);
+        if (t.typ !== 'social' || t.p !== provider || !t.s) throw new Error();
+        return { subject: t.s, name: t.n };
+      } catch {
+        throw new UnauthorizedException('로그인 시간이 지났어요. 다시 시도해 주세요.');
+      }
     }
+    if (!config.socialLoginDemo) throw new BadRequestException('소셜 로그인 설정이 아직 끝나지 않았어요.');
+    if (!cred.subject?.startsWith(`${provider}:`)) throw new BadRequestException('로그인 정보가 올바르지 않아요.');
+    return { subject: cred.subject };
+  }
+
+  async social(provider: Provider, cred: { ticket?: string; subject?: string }, signup?: { name: string; terms: any }) {
     if (!['kakao', 'naver', 'google'].includes(provider)) throw new BadRequestException('지원하지 않는 로그인 방식이에요.');
+    const { subject, name: suggestedName } = this.socialSubject(provider, cred);
     const acc = await this.db.one<{ user_id: number }>(
       `SELECT a.user_id FROM user_auth_accounts a JOIN users u ON u.id = a.user_id
        WHERE a.provider = $1 AND a.provider_subject = $2 AND u.deleted_at IS NULL`,
       [provider, subject],
     );
     if (acc) return { ...this.issue(acc.user_id), isNew: false };
-    if (!signup) return { needsSignup: true as const };
+    if (!signup) return { needsSignup: true as const, suggestedName: suggestedName?.slice(0, 10) };
     this.assertTerms(signup.terms);
     const name = (signup.name ?? '').trim().slice(0, 10);
     if (!name) throw new BadRequestException('크루에서 쓸 이름을 넣어 주세요.');

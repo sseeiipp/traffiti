@@ -14,7 +14,14 @@ interface AuthState {
   /** 지금 보고 있는 크루(대표 크루와 다를 수 있다) */
   crewId: number | null;
   /** 가입 진행 중인 정보(03-0 → 03-1 → 03-2) */
-  signup: { provider: Provider; terms?: { tos: boolean; location: boolean; marketing: boolean } } | null;
+  signup: {
+    provider: Provider;
+    terms?: { tos: boolean; location: boolean; marketing: boolean };
+    /** 소셜 가입: 서버가 준 로그인 표(ticket) 또는 데모 식별자 */
+    cred?: { ticket: string } | { subject: string };
+    /** 소셜 계정의 닉네임(가입 화면 이름 칸에 미리 채운다) */
+    suggestedName?: string;
+  } | null;
   hydrated: boolean;
   setTokens: (t: { accessToken: string; refreshToken: string }) => void;
   logout: () => void;

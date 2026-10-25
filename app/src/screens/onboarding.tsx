@@ -5,6 +5,7 @@ import { Linking, Platform, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { api } from '../api/client';
 import { useAction, useMe } from '../api/hooks';
+import { SocialCancelled, socialCredential } from '../api/socialLogin';
 import { MapBackdrop } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { useAuth, type Provider } from '../store/auth';
@@ -178,13 +179,14 @@ export function AuthStart({ navigation }: P<'AuthStart'>) {
   const social = async (provider: Provider) => {
     setErr(null);
     try {
-      const r = await api('/auth/social', { body: { provider, subject: `${provider}:${deviceId}` } });
+      const cred = await socialCredential(provider, deviceId);
+      const r = await api('/auth/social', { body: { provider, ...cred } });
       if (r.needsSignup) {
-        set({ signup: { provider } });
+        set({ signup: { provider, cred, suggestedName: r.suggestedName } });
         navigation.navigate('Terms');
       } else setTokens(r);
     } catch (e) {
-      setErr(e);
+      if (!(e instanceof SocialCancelled)) setErr(e);
     }
   };
   const btn = { height: 52, borderRadius: 999, alignItems: 'center' as const, justifyContent: 'center' as const };
@@ -345,7 +347,7 @@ export function Terms({ navigation }: P<'Terms'>) {
             title={ready ? '동의하고 계속하기' : '필수 약관에 동의해 주세요'}
             disabled={!ready}
             onPress={() => {
-              set({ signup: { provider: signup?.provider ?? 'email', terms: s } });
+              set({ signup: { ...signup, provider: signup?.provider ?? 'email', terms: s } });
               navigation.navigate('Signup');
             }}
           />
@@ -481,13 +483,14 @@ export function Signup({ navigation }: P<'Signup'>) {
   const provider = signup?.provider ?? 'email';
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
-  const [name, setName] = useState('');
+  const [name, setName] = useState(signup?.suggestedName ?? '');
   const go = useAction(async () => {
     const terms = signup?.terms ?? { tos: false, location: false, marketing: false };
+    const cred = signup?.cred ?? { subject: `${provider}:${deviceId}` };
     const r =
       provider === 'email'
         ? await api('/auth/signup', { body: { email, password: pw, name, terms } })
-        : await api('/auth/social', { body: { provider, subject: `${provider}:${deviceId}`, signup: { name, terms } } });
+        : await api('/auth/social', { body: { provider, ...cred, signup: { name, terms } } });
     set({ signup: null });
     setTokens(r);
   });
