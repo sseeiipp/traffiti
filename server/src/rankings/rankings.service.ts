@@ -6,6 +6,9 @@ import { shapeByKey } from '../geo/shapes.js';
 
 type RankType = 'completion_rate' | 'xp';
 
+/** 시드(데모 계정)가 만든 크루는 랭킹에서 뺀다. `c`는 crews 별칭 */
+const REAL_CREW = `NOT EXISTS (SELECT 1 FROM users du WHERE du.id = c.created_by AND du.email LIKE '%@example.com')`;
+
 interface Scored {
   crewId: number;
   score: number;
@@ -33,14 +36,14 @@ export class RankingsService {
       const rows = await this.db.many<{ crew_id: number; xp: number }>(
         `SELECT c.id AS crew_id, COALESCE(sum(t.xp_amount) FILTER (WHERE $1::timestamptz IS NULL OR (t.created_at >= $1 AND t.created_at < $2)), 0)::int AS xp
          FROM crews c LEFT JOIN crew_xp_transactions t ON t.crew_id = c.id
-         WHERE c.deleted_at IS NULL GROUP BY c.id`,
+         WHERE c.deleted_at IS NULL AND ${REAL_CREW} GROUP BY c.id`,
         [range?.start ?? null, range?.end ?? null],
       );
       return rows.filter((r) => r.xp > 0).map((r) => ({ crewId: r.crew_id, score: r.xp, detail: '' }));
     }
     const rows = await this.db.many<{ crew_id: number; shape_key: string; category: string | null; progress: number; status: string }>(
       `SELECT ch.crew_id, ch.shape_key, ch.category, ch.progress, ch.status FROM challenges ch JOIN crews c ON c.id = ch.crew_id
-       WHERE c.deleted_at IS NULL AND ch.crew_id IS NOT NULL
+       WHERE c.deleted_at IS NULL AND ch.crew_id IS NOT NULL AND ${REAL_CREW}
          AND ($1::timestamptz IS NULL OR (ch.start_at < $2 AND COALESCE(ch.completed_at, ch.cancelled_at, ch.end_at) >= $1))`,
       [range?.start ?? null, range?.end ?? null],
     );
@@ -109,16 +112,21 @@ export class RankingsService {
               (SELECT count(*)::int FROM crew_members m WHERE m.crew_id = c.id AND m.left_at IS NULL) AS members,
               (SELECT COALESCE(sum(xp_amount), 0)::int FROM crew_xp_transactions t WHERE t.crew_id = c.id) AS xp,
               EXISTS (SELECT 1 FROM crew_members m WHERE m.crew_id = c.id AND m.user_id = $1 AND m.left_at IS NULL) AS mine
-       FROM crews c WHERE c.id = ANY($2)`,
-      [userId, snap!.rows.map((r) => r.crew_id)],
+       FROM crews c WHERE c.id = ANY($2) AND c.deleted_at IS NULL AND ${REAL_CREW}`,
+      [userId, [...snap!.rows, ...(prev?.rows ?? [])].map((r) => r.crew_id)],
     );
+    // 예전 스냅샷에 데모·삭제 크루가 남아 있을 수 있어 실제 크루만 남기고 순위를 다시 매긴다
+    const real = <T extends { crew_id: number; score: number }>(rows: T[]) =>
+      competitionRank(rows.filter((r) => crews.some((c) => c.id === r.crew_id)));
+    const cur = real(snap!.rows);
+    const prevRanked = prev ? real(prev.rows) : null;
     const search = (q.search ?? '').trim().slice(0, 20);
-    const all = snap!.rows
+    const all = cur
       .map((r) => {
         const c = crews.find((x) => x.id === r.crew_id);
         if (!c) return null;
-        const p = prev?.rows.find((x) => x.crew_id === r.crew_id);
-        const tie = snap!.rows.filter((o) => o.score === r.score).length > 1;
+        const p = prevRanked?.find((x) => x.crew_id === r.crew_id);
+        const tie = cur.filter((o) => o.score === r.score).length > 1;
         return {
           crewId: c.id,
           name: c.name,

@@ -1339,9 +1339,11 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
                 <Tap
                   key={a}
                   onPress={() =>
-                    i === 2
-                      ? navigation.navigate("CourseSelect")
-                      : navigation.navigate("AreaPick")
+                    a.includes("다시 그리")
+                      ? navigation.goBack()
+                      : i === 2 || a.includes("다른 그림")
+                        ? navigation.navigate("CourseSelect")
+                        : navigation.navigate("AreaPick")
                   }
                 >
                   <Glass

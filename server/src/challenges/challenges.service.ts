@@ -16,6 +16,9 @@ import { fitToRoads } from '../geo/routing.js';
 
 /** 경로 한 구간의 길이(m). 진행률은 이 단위로 센다. */
 export const SEG_M = 20;
+/** 닮은 정도가 이보다 낮거나, 길 경로가 그림보다 이 배수 넘게 길면 다시 그리라고 안내한다 */
+const REDRAW_SIM = 60;
+const REDRAW_STRETCH = 1.6;
 /** 지원(시연) 지역: 성동구·광진구 일대 */
 export const SUPPORTED = { minLat: 37.525, maxLat: 37.57, minLng: 127.015, maxLng: 127.095 };
 export const DEFAULT_START: LatLng = [37.5446, 127.0559]; // 성수역 3번 출구
@@ -73,9 +76,24 @@ export class ChallengesService {
     const fit = await fitToRoads(custom ? input.customPath! : shape!.path, start, km * 1000);
     const route = resample(fit.road ?? fit.shape, SEG_M);
     const meters = pathLength(route);
+    // 길이 끊기거나, 그림과 많이 다르거나, 돌아가느라 길이가 크게 늘면 이상한 경로를 보여주지 않고 다시 그리게 한다
+    const stretch = fit.road ? meters / Math.max(1, pathLength(fit.shape)) : 0;
+    if (!fit.road || fit.similarity == null || fit.similarity < REDRAW_SIM || stretch > REDRAW_STRETCH) {
+      return {
+        ok: false as const,
+        reason: !fit.road
+          ? '그림을 이어 줄 길을 찾지 못했어요. 길이 많은 곳에서 그림을 조금 단순하게 다시 그려 주세요.'
+          : custom
+            ? '길로 옮기면 그림이 꼬이거나 많이 달라져요. 선을 조금 단순하고 크게 다시 그려 주세요.'
+            : '이 출발 지점에서는 길로 옮기면 그림이 많이 달라져요. 출발 지점을 옮기거나 다른 그림을 골라 주세요.',
+        alternatives: custom
+          ? ['그림 다시 그리기', '출발 지점 옮기기', '비슷한 검증된 코스 보기']
+          : ['다른 그림 고르기', '출발 지점 옮기기', '비슷한 검증된 코스 보기'],
+        similarity: fit.similarity,
+      };
+    }
     const notes: string[] = [];
-    if (!fit.road) notes.push('지금은 도로 경로를 찾지 못해 그림 선을 그대로 보여줘요.');
-    else {
+    {
       const m = fit.movedM, d = Math.abs(fit.rotatedDeg ?? 0);
       if (m && d) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮기고 ${d}° 돌려 놓았어요.`);
       else if (m) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮겨 놓았어요.`);
