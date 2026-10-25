@@ -8,6 +8,26 @@ import { Public } from './auth.guard.js';
 import { AuthService, type Provider } from './auth.service.js';
 import { authorizeUrl, fetchProfile, isAllowedReturn, isConfigured, OAUTH_PROVIDERS, withQuery, type OAuthProvider } from './oauth.js';
 
+/**
+ * 로그인을 마치고 앱(exp://, travity://)으로 돌아간다.
+ * 302로 앱 주소에 바로 보내면, 구글처럼 동의 화면이 스크립트로 넘기는 경우 안드로이드 브라우저(Chrome 탭·삼성 인터넷)가
+ * 사용자가 누르지 않은 앱 열기를 막아서 화면이 멈춘 것처럼 보인다. 그래서 페이지를 하나 띄워 바로 넘겨 보고,
+ * 막히면 사용자가 버튼을 눌러 돌아가게 한다.
+ */
+function backToApp(res: Response, url: string) {
+  const href = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  res
+    .status(200)
+    .type('html')
+    .set('cache-control', 'no-store')
+    .send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traffiti로 돌아가기</title><meta http-equiv="refresh" content="0;url=${href}">
+<style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;font-family:system-ui,sans-serif;background:#fff;color:#111}
+a{display:block;padding:16px 32px;border-radius:999px;background:#A3E635;color:#111;font-weight:700;font-size:17px;text-decoration:none}p{margin:0;color:#666;font-size:15px}</style></head>
+<body><p>앱으로 돌아가는 중이에요</p><a id="go" href="${href}">앱으로 돌아가기</a>
+<script>location.replace(document.getElementById('go').href)</script></body></html>`);
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -70,17 +90,18 @@ export class AuthController {
     } catch {
       return res.status(400).send('로그인 시간이 지났어요. 앱에서 다시 시도해 주세요.');
     }
+    this.oauthLog.log(`${p} callback ${q.code ? 'code' : `error=${q.error}`}`);
     if (q.error || !q.code) {
       // 사용자가 동의 화면에서 취소한 경우도 여기로 온다
-      return res.redirect(302, withQuery(st.r, { error: q.error === 'access_denied' ? 'cancelled' : (q.error ?? 'no_code') }));
+      return backToApp(res, withQuery(st.r, { error: q.error === 'access_denied' ? 'cancelled' : (q.error ?? 'no_code') }));
     }
     try {
       const prof = await fetchProfile(p as OAuthProvider, q.code, q.state!);
       const ticket = this.jwt.sign({ typ: 'social', p, s: prof.subject, n: prof.name }, { expiresIn: '30m' });
-      return res.redirect(302, withQuery(st.r, { ticket }));
+      return backToApp(res, withQuery(st.r, { ticket }));
     } catch (e) {
       this.oauthLog.warn(`${p} 로그인 실패: ${(e as Error).message}`);
-      return res.redirect(302, withQuery(st.r, { error: 'provider' }));
+      return backToApp(res, withQuery(st.r, { error: 'provider' }));
     }
   }
 
