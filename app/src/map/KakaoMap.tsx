@@ -73,6 +73,7 @@ function build(p: RouteArtProps) {
       else lines.push({ pts: [route[i], route[i + 1]], color: C.ink, w: 2.5, op: 0.45, dash: true });
     });
   }
+  if (p.leg && p.leg.points.length > 1) lines.push({ pts: p.leg.points, color: p.leg.color, w: stroke + 3, op: 0.9, dash: false });
   if (trail && trail.points.length > 1) lines.push({ pts: trail.points, color: trail.color, w: stroke + 1, op: 1, dash: false });
   const bounds = [...route, ...(trail?.points ?? []), ...(p.target ?? [])];
   // 시트 높이가 바뀌어도 다시 맞춘다
@@ -82,7 +83,7 @@ function build(p: RouteArtProps) {
 
 export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'fail'>('loading');
-  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom, p.target]);
+  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom, p.target, p.leg]);
   const page = useMemo(() => html(KAKAO_JS_KEY), []);
   const web = useRef<WebViewHandle>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);

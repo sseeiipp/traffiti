@@ -84,6 +84,8 @@ export interface RouteArtProps {
   me?: { pos: LatLng; color: string } | null;
   /** 이번 러닝 경로 */
   trail?: { points: LatLng[]; color: string } | null;
+  /** 내가 맡은 구간(1/n). 흐린 경로 위에 내 색으로 굵게 */
+  leg?: { points: LatLng[]; color: string } | null;
   showStart?: boolean;
   /** 남은 구간 점선 숨기기(공유 이미지) */
   hideRemaining?: boolean;
@@ -116,6 +118,7 @@ function SvgRouteArt({
   seed,
   me,
   trail,
+  leg,
   showStart,
   hideRemaining,
   target,
@@ -158,6 +161,7 @@ function SvgRouteArt({
             ),
           )
         )}
+        {leg && leg.points.length > 1 ? <Path d={toD(leg.points.map(f))} stroke={leg.color} strokeWidth={stroke + 3} strokeOpacity={0.9} /> : null}
         {trail && trail.points.length > 1 ? <Path d={toD(trail.points.map(f))} stroke={trail.color} strokeWidth={stroke + 1} /> : null}
       </G>
       {showStart ? <Circle cx={start[0]} cy={start[1]} r={7} fill={C.ink} stroke="#FFFFFF" strokeWidth={3} /> : null}

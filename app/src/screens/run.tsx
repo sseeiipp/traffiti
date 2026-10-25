@@ -3,12 +3,12 @@ import * as Location from 'expo-location';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { api } from '../api/client';
-import { useAction, useChallenge, useCrew, useMe, useRun as useRunQuery, useUnit } from '../api/hooks';
+import { useAction, useChallenge, useCrew, useMe, useRun as useRunQuery, useUnit, type Challenge } from '../api/hooks';
 import { RouteArt, type LatLng } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { START_SPOTS } from '../store/draft';
 import { newClientId, useRun } from '../store/run';
-import { densify, distanceOf, finishRun, simulationPath, SIMULATE, uploadPending } from '../run/engine';
+import { densify, distanceOf, finishRun, haversine, simulationPath, SIMULATE, uploadPending } from '../run/engine';
 import { C } from '../theme';
 import { IcChevron, IcLocate, IcPlay, IcPause } from '../ui/icons';
 import {
@@ -51,7 +51,7 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
   const myLeg = mine ? { points: c.route.slice(mine.fromSeg, mine.toSeg + 1), color: mine.color } : null;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <Measure height={360}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={360} pad={44} seed={c.id} trail={myLeg} />}</Measure>
+      <Measure height={360}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={360} pad={44} seed={c.id} leg={myLeg} />}</Measure>
       <RoundBtn onPress={() => navigation.goBack()} style={{ position: 'absolute', left: 16, top: top + 2 }} />
       <CourseMenu
         c={c}
@@ -138,6 +138,38 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
 
 // ---------- 15 GPS 러닝 · 일시정지 · 재개 ----------
 
+/**
+ * 달리는 중 내 구간(1/n): 지도에 굵게 그릴 점, 시작점까지 거리(구간 밖일 때), 채운 비율.
+ * 채운 구간은 서버에 저장된 것 + 이번 러닝에서 30m 안으로 지나간 것.
+ */
+function legProgress(c: Challenge | undefined, trail: LatLng[], here: LatLng | null) {
+  const mine = c?.status === 'active' ? c.plan?.find((p) => p.isMe) : undefined;
+  if (!c || !mine || mine.toSeg <= mine.fromSeg) return null;
+  const points = c.route.slice(mine.fromSeg, mine.toSeg + 1);
+  const recent = trail.length > 600 ? trail.filter((_, i) => i % Math.ceil(trail.length / 600) === 0 || i === trail.length - 1) : trail;
+  let filled = 0;
+  for (let i = mine.fromSeg; i < mine.toSeg; i++) {
+    if (c.segments[i]) {
+      filled++;
+      continue;
+    }
+    const a = c.route[i], b = c.route[i + 1];
+    const mid: LatLng = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (recent.some((p) => haversine(p, mid) <= 30)) filled++;
+  }
+  const total = mine.toSeg - mine.fromSeg;
+  // 구간 위에 있으면(어느 점이든 40m 안) 진행률, 아니면 시작점까지 거리
+  const onLeg = here ? points.some((p) => haversine(p, here) <= 40) : false;
+  return {
+    points,
+    color: mine.color,
+    part: mine.part,
+    done: filled / total,
+    leftKm: Math.round(((total - filled) * 20) / 100) / 10,
+    toStartM: here && !onLeg && filled < total ? Math.round(haversine(here, points[0])) : null,
+  };
+}
+
 export function Running({ navigation, route }: P<'Running'>) {
   const unit = useUnit();
   const top = useTop();
@@ -223,6 +255,8 @@ export function Running({ navigation, route }: P<'Running'>) {
     : (now - session.startedAt - session.pausedMs - (paused && session.pausedAt ? now - session.pausedAt : 0)) / 1000;
   const remaining = ch.data ? Math.max(0, ch.data.remainingKm - dist / 1000) : null;
   const trail: LatLng[] = pts.map((p) => [p.lat, p.lng]);
+  const here = trail.length ? trail[trail.length - 1] : null;
+  const legInfo = legProgress(ch.data, trail, here);
   const pending = pts.length - session.uploaded - 1;
 
   const togglePause = () => {
@@ -263,6 +297,7 @@ export function Running({ navigation, route }: P<'Running'>) {
             stroke={5}
             seed={4}
             trail={trail.length > 1 ? { points: trail, color: myColor } : null}
+            leg={legInfo ? { points: legInfo.points, color: legInfo.color } : null}
             me={trail.length ? { pos: trail[trail.length - 1], color: myColor } : null}
             map
           />
@@ -282,7 +317,26 @@ export function Running({ navigation, route }: P<'Running'>) {
       <RoundBtn kind="custom" label="내 위치로 이동" style={{ position: 'absolute', right: 16, top: top + 4 }}>
         <IcLocate />
       </RoundBtn>
-      {ch.data?.remainingPart ? (
+      {legInfo ? (
+        <Glass style={{ position: 'absolute', left: 16, right: 16, top: 440, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: legInfo.color }} />
+            <T size={14} weight="700" style={{ flex: 1 }}>
+              내 구간 · {legInfo.part}
+            </T>
+            <T size={13} weight="600" color={C.sub} rounded>
+              {legInfo.toStartM != null
+                ? `시작점까지 ${fmtKm(legInfo.toStartM / 1000, unit)}`
+                : legInfo.done >= 1
+                  ? '다 채웠어요'
+                  : `${pct(legInfo.done)} · ${fmtKm(legInfo.leftKm, unit)} 남음`}
+            </T>
+          </View>
+          <View style={{ height: 6, borderRadius: 3, backgroundColor: C.fill, overflow: 'hidden' }}>
+            <View style={{ width: `${Math.round(legInfo.done * 100)}%`, height: 6, backgroundColor: legInfo.color }} />
+          </View>
+        </Glass>
+      ) : ch.data?.remainingPart ? (
         <Glass style={{ position: 'absolute', left: 16, top: 470, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
           <T size={13} weight="500">
             {ch.data.remainingPart} 구간을 채우는 중
