@@ -52,7 +52,7 @@ export function CourseMenu({
         ) : open === 'delete' ? (
           <>
             <T size={20} weight="700">
-              이 코스를 지울까요?
+              {c.status === 'active' ? '이 코스를 지울까요?' : '이 작품을 지울까요?'}
             </T>
             <T size={14} color={C.sub} lh={1.5}>
               {c.status === 'active' ? '진행 중인 챌린지와 지금까지 그린 기록이 함께 지워져요.' : '작품과 함께 그린 기록이 지워져요.'} 크루원 모두에게서 사라지고 되돌릴 수 없어요. 달린 거리
@@ -90,7 +90,7 @@ export function CourseMenu({
                 }}
               />
             ) : null}
-            {c.canDelete ? <Btn title="코스 삭제" kind="dangerSoft" onPress={() => setOpen('delete')} /> : null}
+            {c.canDelete ? <Btn title={c.status === 'active' ? '코스 삭제' : '작품 삭제'} kind="dangerSoft" onPress={() => setOpen('delete')} /> : null}
             <Btn title="취소" kind="ghost" onPress={close} style={{ backgroundColor: 'transparent' }} />
           </>
         )}
