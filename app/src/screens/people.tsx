@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { api } from '../api/client';
-import { useAction } from '../api/hooks';
+import { useAction, useUnit } from '../api/hooks';
 import { ShapeGlyph } from '../map/MapArt';
 import { shapeLabel } from '../map/shapes';
 import type { P } from '../navigation/types';
 import { C, font } from '../theme';
 import { IcClose, IcMore, IcSearch } from '../ui/icons';
 import { Avatar, ErrorText, Glass, H1, Loading, NavBar, RoundBtn, Screen, T, Tap } from '../ui/kit';
+import { fmtKm } from './common';
 import { IcFlag, ReportSheet } from './results';
 
 // ---------- 32 유저 찾기 · 초대 ----------
@@ -119,6 +120,7 @@ interface PersonProfile {
 
 /** 대표 크루 · 이번 달 거리 · 완성 작품만 보이고, 상세 경로는 본인이 공개한 만큼만 */
 export function UserProfile({ navigation, route }: P<'UserProfile'>) {
+  const unit = useUnit();
   const p = useQuery({ queryKey: ['person', route.params.userId], queryFn: () => api<PersonProfile>(`/users/${route.params.userId}/profile`) });
   const [menu, setMenu] = useState(false);
   const [report, setReport] = useState(false);
@@ -150,7 +152,7 @@ export function UserProfile({ navigation, route }: P<'UserProfile'>) {
         </View>
         <View style={{ flexDirection: 'row', paddingVertical: 12, borderRadius: 18, backgroundColor: C.soft }}>
           {[
-            [`${u.monthKm}km`, '이번 달 거리'],
+            [fmtKm(u.monthKm, unit), '이번 달 거리'],
             [String(u.completedArtworks), '완성 작품'],
             [u.crewLevel ? `Lv ${u.crewLevel}` : '–', '크루 레벨'],
           ].map(([v, l]) => (

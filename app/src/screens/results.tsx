@@ -23,6 +23,7 @@ import {
   useMe,
   useMyCrews,
   useRankings,
+  useUnit,
   type Challenge,
 } from '../api/hooks';
 import { RouteArt, ShapeGlyph } from '../map/MapArt';
@@ -53,7 +54,7 @@ import {
   useBottom,
   useWide,
 } from '../ui/kit';
-import { md, Measure, pct, ymd } from './common';
+import { fmtKm, kmParts, md, Measure, pct, ymd } from './common';
 
 type TabP<K extends keyof Tabs> = CompositeScreenProps<BottomTabScreenProps<Tabs, K>, NativeStackScreenProps<Stack>>;
 
@@ -152,6 +153,7 @@ function relayText(c: Challenge) {
 }
 
 export function CrewResult({ navigation }: TabP<'CrewResult'>) {
+  const unit = useUnit();
   const crewId = useCurrentCrewId();
   const crews = useMyCrews();
   const cur = useCurrentChallenge(crewId);
@@ -301,7 +303,7 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
                     {p.isMe ? `${p.name}(나)` : p.name}
                   </T>
                   <T size={12} color={C.sub}>
-                    {p.part} · {p.km}km
+                    {p.part} · {fmtKm(p.km, unit)}
                   </T>
                 </View>
               </Glass>
@@ -592,6 +594,7 @@ export function CrewRanking({ navigation }: P<'CrewRanking'>) {
 // ---------- 19-1 크루 상세(다른 크루) ----------
 
 export function CrewProfile({ navigation, route }: P<'CrewProfile'>) {
+  const unit = useUnit();
   const crew = useCrew(route.params.crewId);
   const art = useRankings({ type: 'completion_rate', period: 'monthly' });
   const xp = useRankings({ type: 'xp', period: 'monthly' });
@@ -638,7 +641,7 @@ export function CrewProfile({ navigation, route }: P<'CrewProfile'>) {
         <View style={{ flexDirection: 'row', paddingVertical: 12, borderRadius: 18, backgroundColor: C.soft }}>
           {[
             [String(mine.filter((w) => w.status === 'completed').length), '', '완성 작품'],
-            [String(c.monthKm ?? 0), 'km', `${m}월 함께 달린 거리`],
+            [...kmParts(c.monthKm ?? 0, unit, undefined, false), `${m}월 함께 달린 거리`],
             [String(Math.round(Math.max(0, ...mine.map((w) => w.progress)) * 100)), '%', '최고 달성률'],
           ].map(([v, u, l]) => (
             <View key={l} style={{ flex: 1, alignItems: 'center', gap: 1 }}>
@@ -696,7 +699,7 @@ export function CrewProfile({ navigation, route }: P<'CrewProfile'>) {
               </T>
               <T size={13} color={C.sub}>
                 {p.role === 'leader' ? '크루장 · ' : ''}
-                {m}월 {p.monthKm}km
+                {m}월 {fmtKm(p.monthKm, unit)}
               </T>
             </View>
           ))}
@@ -865,6 +868,7 @@ export function ReportSheet({ open, kind, id, name, onClose }: { open: boolean; 
 // ---------- 20 완성 작품 ----------
 
 export function Artwork({ navigation, route }: P<'Artwork'>) {
+  const unit = useUnit();
   const ch = useChallenge(route.params.challengeId);
   if (!ch.data) return <Loading />;
   const c = ch.data;
@@ -920,7 +924,7 @@ export function Artwork({ navigation, route }: P<'Artwork'>) {
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {[
           ['완성도', String(Math.round(c.progress * 100)), '%'],
-          ['함께 달린 거리', String(total), ' km'],
+          ['함께 달린 거리', ...kmParts(total, unit)],
           ['참여', String(c.contributors.length), ' 명'],
         ].map(([l, v, u]) => (
           <View key={l} style={{ flex: 1, gap: 2 }}>
@@ -938,7 +942,7 @@ export function Artwork({ navigation, route }: P<'Artwork'>) {
       </View>
       {gapKm > 0 ? (
         <T size={13} color={C.sub} lh={1.5}>
-          {done ? `GPS가 끊기거나 채우지 못한 ${gapKm}km는 점선으로 남겼어요.` : `아직 채우지 못한 ${gapKm}km는 점선으로 남겼어요.`}
+          {done ? `GPS가 끊기거나 채우지 못한 ${fmtKm(gapKm, unit)}는 점선으로 남겼어요.` : `아직 채우지 못한 ${fmtKm(gapKm, unit)}는 점선으로 남겼어요.`}
         </T>
       ) : null}
     </Screen>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, View } from 'react-native';
 import { api } from '../api/client';
 import { usePhotoPicker } from '../api/photo';
-import { useAction, useArtworks, useCrew, useCurrentCrewId, type CrewDetail } from '../api/hooks';
+import { useAction, useArtworks, useCrew, useCurrentCrewId, useUnit, type CrewDetail } from '../api/hooks';
 import { RouteArt, ShapeGlyph } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { useAuth } from '../store/auth';
@@ -33,7 +33,7 @@ import {
   Toggle,
   useBottom,
 } from '../ui/kit';
-import { md, Measure, pct } from './common';
+import { fmtKm, md, Measure, pct } from './common';
 
 function useCrewParam(id?: number) {
   const current = useCurrentCrewId();
@@ -301,6 +301,7 @@ export function CrewEdit({ navigation, route }: P<'CrewEdit'>) {
 // ---------- 29 멤버 관리 · 가입 요청 ----------
 
 export function CrewMembers({ navigation, route }: P<'CrewMembers'>) {
+  const unit = useUnit();
   const id = route.params.crewId;
   const crew = useCrew(id);
   const [open, setOpen] = useState<number | null>(null);
@@ -358,7 +359,7 @@ export function CrewMembers({ navigation, route }: P<'CrewMembers'>) {
                   ) : null}
                 </View>
                 <T size={13} color={C.sub}>
-                  {m.monthRuns ? `이번 달 ${m.monthRuns}회 달림 · ${m.monthKm}km` : `${md(m.joinedAt)} 가입`}
+                  {m.monthRuns ? `이번 달 ${m.monthRuns}회 달림 · ${fmtKm(m.monthKm, unit)}` : `${md(m.joinedAt)} 가입`}
                 </T>
               </View>
               </Pressable>

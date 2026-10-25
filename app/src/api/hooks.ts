@@ -15,7 +15,7 @@ export interface Me {
   settings: {
     region: string;
     regionAuto: boolean;
-    distanceUnit: 'km' | 'mi';
+    distanceUnit: 'km' | 'm' | 'mi';
     notifyNewChallenge: boolean;
     notifySegment: boolean;
     notifyArtwork: boolean;
@@ -190,6 +190,9 @@ export interface RankRow {
 }
 
 // ---------- 조회 ----------
+
+/** 거리 표시 단위. 예전 설정 mi는 km로 본다 */
+export const useUnit = (): 'km' | 'm' => (useMe().data?.settings.distanceUnit === 'm' ? 'm' : 'km');
 
 export const useMe = () => {
   const token = useAuth((s) => s.accessToken);

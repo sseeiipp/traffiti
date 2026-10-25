@@ -4,19 +4,20 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { monthKey, useMe, useRun, useRunsMonth } from '../api/hooks';
+import { monthKey, useMe, useRun, useRunsMonth, useUnit } from '../api/hooks';
 import { RouteArt, ShapeGlyph, type LatLng } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { C } from '../theme';
 import { IcBack, IcChevron, IcLock } from '../ui/icons';
 import { Glass, Loading, RoundBtn, Screen, T, TabPage, Tap } from '../ui/kit';
-import { clock, hm, Measure, mdw, pace, pct } from './common';
+import { clock, fmtKm, hm, kmParts, Measure, mdw, pace, pct } from './common';
 
 type CalProps = CompositeScreenProps<BottomTabScreenProps<Tabs, 'Calendar'>, NativeStackScreenProps<Stack>>;
 
 // ---------- 24 달력 · 날짜별 러닝 ----------
 
 export function Calendar({ navigation }: CalProps) {
+  const unit = useUnit();
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [sel, setSel] = useState(today.getDate());
@@ -136,7 +137,7 @@ export function Calendar({ navigation }: CalProps) {
                   </T>
                 </View>
                 <T size={16} weight="600" rounded>
-                  {r.distanceKm.toFixed(2)}km
+                  {fmtKm(r.distanceKm, unit, 2)}
                 </T>
               </Glass>
             </Tap>
@@ -156,6 +157,7 @@ export function Calendar({ navigation }: CalProps) {
 // ---------- 25 러닝 기록 상세 ----------
 
 export function RunDetail({ navigation, route }: P<'RunDetail'>) {
+  const unit = useUnit();
   const run = useRun(route.params.runId);
   const me = useMe();
   if (!run.data) return <Loading />;
@@ -205,7 +207,7 @@ export function RunDetail({ navigation, route }: P<'RunDetail'>) {
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {[
-          ['거리', r.distanceKm.toFixed(2), ' km'],
+          ['거리', ...kmParts(r.distanceKm, unit, 2)],
           ['시간', clock(r.durationS), ''],
           ['평균 페이스', pace(r.paceS), ''],
           ['기록 공백', r.gapCount ? `${r.gapCount}곳 · ${Math.round(r.gapSeconds / 60)}분` : '없음', ''],

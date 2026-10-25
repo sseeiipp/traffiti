@@ -17,9 +17,11 @@ import {
   useCrew,
   useCurrentCrewId,
   useMe,
+  useUnit,
 } from "../api/hooks";
 import { KAKAO_JS_KEY, KakaoDrawMap, KakaoRouteMap, type MapView } from "../map/KakaoMap";
 import { MapBackdrop, RouteArt, ShapeGlyph, type LatLng } from "../map/MapArt";
+import { myLocation } from "../map/myLocation";
 import { FRIEND_SHAPES, SHAPE_ICONS, shapeLabel } from "../map/shapes";
 import type { P } from "../navigation/types";
 import { useAuth } from "../store/auth";
@@ -62,7 +64,7 @@ import {
   useBottom,
   useTop,
 } from "../ui/kit";
-import { md, Measure, pct } from "./common";
+import { fmtKm, kmParts, md, Measure, pct } from "./common";
 
 type Pt = [number, number];
 
@@ -250,6 +252,7 @@ interface ShapeInfo {
 }
 
 export function CourseSelect({ navigation }: P<"CourseSelect">) {
+  const unit = useUnit();
   const draft = useDraft();
   const [range, setRange] = useState<"all" | "short" | "long">("all");
   const shapes = useQuery({
@@ -367,7 +370,7 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
                   </View>
                   <T size={12} color={C.sub}>
                     <T size={12} color={C.sub} rounded>
-                      {s.km}km
+                      {fmtKm(s.km, unit)}
                     </T>{" "}
                     · 난이도 {s.difficulty}
                   </T>
@@ -447,6 +450,7 @@ function Tools({
 // ---------- 09 지도 위 직접 그리기 ----------
 
 export function DrawMap({ navigation }: P<"DrawMap">) {
+  const unit = useUnit();
   const draft = useDraft();
   const top = useTop();
   const b = useBottom();
@@ -456,12 +460,14 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   const [size, setSize] = useState({ w: 390, h: 700 });
   const [center, setCenter] = useState<LatLng>(draft.start);
   const [view, setView] = useState<MapView | null>(null);
-  // 지금 위치가 잡히면 지도를 그곳으로
+  const [here, setHere] = useState<LatLng | null>(null);
+  // 위치 권한을 물어 지금 위치로 지도를 옮기고 내 위치 점을 찍는다
   useEffect(() => {
-    Location.getForegroundPermissionsAsync()
-      .then((p) => (p.granted ? Location.getLastKnownPositionAsync() : null))
-      .then((pos) => pos && setCenter([pos.coords.latitude, pos.coords.longitude]))
-      .catch(() => {});
+    myLocation(true).then((pos) => {
+      if (!pos) return;
+      setHere(pos);
+      setCenter(pos);
+    });
   }, []);
   const box = { x: 22, y: 130, w: size.w - 44, h: 390 };
   // 카카오맵이 없을 때(키 없음·불러오기 실패): 화면 폭 ≈ 2.6km인 고정 지도
@@ -494,6 +500,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           h={size.h}
           center={center}
           interactive={tool === "move"}
+          me={here}
           onView={setView}
           fallback={
             <Svg width={size.w} height={size.h}>
@@ -613,7 +620,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           <T size={13} color={C.sub}>
             선 길이 약{" "}
             <T size={13} weight="700" rounded>
-              {km}km
+              {fmtKm(km, unit)}
             </T>
           </T>
         </View>
@@ -777,6 +784,7 @@ function Slider({
 }
 
 export function AreaPick({ navigation }: P<"AreaPick">) {
+  const unit = useUnit();
   const draft = useDraft();
   const top = useTop();
   const b = useBottom();
@@ -1016,7 +1024,7 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
               <T size={13} color={C.sub}>
                 선 길이 약{" "}
                 <T size={13} weight="700" rounded>
-                  {(draft.km ?? 5.2).toFixed(1)}km
+                  {fmtKm(draft.km ?? 5.2, unit, 1)}
                 </T>
               </T>
             </View>
@@ -1159,6 +1167,7 @@ interface Suggestion {
 }
 
 export function RouteReview({ navigation }: P<"RouteReview">) {
+  const unit = useUnit();
   const draft = useDraft();
   const top = useTop();
   const body = {
@@ -1317,8 +1326,8 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <StatCard
                   label="예상 거리"
-                  value={String(s.distanceKm)}
-                  unit=" km"
+                  value={kmParts(s.distanceKm, unit)[0]}
+                  unit={kmParts(s.distanceKm, unit)[1]}
                 />
                 <StatCard
                   label="그림과 닮은 정도"
@@ -1429,6 +1438,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
 // ---------- 13 챌린지 확정 · 공유 ----------
 
 export function ChallengeShare({ navigation }: P<"ChallengeShare">) {
+  const unit = useUnit();
   const qc = useQueryClient();
   const draft = useDraft();
   const crewId = useCurrentCrewId();
@@ -1573,7 +1583,7 @@ export function ChallengeShare({ navigation }: P<"ChallengeShare">) {
             </T>
             <T size={13} color={C.sub}>
               <T size={13} color={C.sub} rounded>
-                {suggest.data?.distanceKm ?? "–"}km
+                {fmtKm(suggest.data?.distanceKm, unit)}
               </T>{" "}
               · {draft.areaLabel} · 출발 {draft.startLabel}
             </T>
@@ -1685,6 +1695,7 @@ export function ChallengeShare({ navigation }: P<"ChallengeShare">) {
 const FRIEND_LINK = (code: string) => `https://example.com/f/${code}`; // 실제 앱 링크는 아직 미정(기획서)
 
 export function FriendRun({ navigation }: P<"FriendRun">) {
+  const unit = useUnit();
   const qc = useQueryClient();
   const [mode, setMode] = useState<"make" | "join">("make");
   const [step, setStep] = useState(1);
@@ -1703,14 +1714,7 @@ export function FriendRun({ navigation }: P<"FriendRun">) {
   useEffect(() => {
     if (step !== 2 || here) return;
     // 출발 지점은 지금 위치 근처. 위치를 못 받으면 성수역 근처로
-    Location.getForegroundPermissionsAsync()
-      .then((p) => (p.granted ? Location.getCurrentPositionAsync({}) : null))
-      .then((l) =>
-        setHere(
-          l ? [l.coords.latitude, l.coords.longitude] : START_SPOTS[0].pos,
-        ),
-      )
-      .catch(() => setHere(START_SPOTS[0].pos));
+    myLocation(true).then((l) => setHere(l ?? START_SPOTS[0].pos));
   }, [step, here]);
   const preview = useQuery({
     queryKey: ["suggest", shape, here],
@@ -1744,7 +1748,7 @@ export function FriendRun({ navigation }: P<"FriendRun">) {
 
   const quick = ["heart", "star", "whale"];
   if (!quick.includes(shape)) quick[2] = shape;
-  const summary = `${shapeLabel(shape)} · 오늘 24시까지 · 약 ${preview.data?.distanceKm ?? cur?.km ?? "–"}km`;
+  const summary = `${shapeLabel(shape)} · 오늘 24시까지 · 약 ${fmtKm(preview.data?.distanceKm ?? cur?.km, unit)}`;
   const T1: Record<number, [string, string]> = {
     1: ["친구와 달리기", "크루 없이도 코드 하나로 함께 그림을 그려요."],
     2: [
@@ -1917,8 +1921,8 @@ export function FriendRun({ navigation }: P<"FriendRun">) {
               <StatCard
                 radius={16}
                 label="예상 거리"
-                value={String(preview.data?.distanceKm ?? "–")}
-                unit=" km"
+                value={kmParts(preview.data?.distanceKm, unit)[0]}
+                unit={kmParts(preview.data?.distanceKm, unit)[1]}
               />
               <StatCard
                 radius={16}
@@ -2029,7 +2033,7 @@ export function FriendRun({ navigation }: P<"FriendRun">) {
                   </T>
                   <T size={12} color={C.sub}>
                     {join.data.joined}명 참여 · {join.data.daysLeft}일 남음 ·{" "}
-                    {join.data.distanceKm}km
+                    {fmtKm(join.data.distanceKm, unit)}
                   </T>
                 </View>
               </Glass>

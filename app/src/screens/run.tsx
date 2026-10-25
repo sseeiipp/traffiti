@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { api } from '../api/client';
-import { useAction, useChallenge, useCrew, useMe, useRun as useRunQuery } from '../api/hooks';
+import { useAction, useChallenge, useCrew, useMe, useRun as useRunQuery, useUnit } from '../api/hooks';
 import { RouteArt, type LatLng } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { START_SPOTS } from '../store/draft';
@@ -31,11 +31,12 @@ import {
   useBottom,
   useTop,
 } from '../ui/kit';
-import { clock, hm, md, Measure, pace, partsOf, pct } from './common';
+import { clock, fmtKm, hm, kmParts, md, Measure, pace, partsOf, pct } from './common';
 
 // ---------- 14 챌린지 상세 · 참여 ----------
 
 export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
+  const unit = useUnit();
   const top = useTop();
   const b = useBottom();
   const ch = useChallenge(route.params.challengeId);
@@ -74,7 +75,7 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
         <Glass style={{ borderRadius: 20 }}>
           {[
             ['기간', `${md(c.startAt)} – ${md(c.endAt)}${active ? ` · ${c.daysLeft}일 남음` : ''}`],
-            ['남은 구간', `${c.remainingKm} / ${c.distanceKm}km`],
+            ['남은 구간', `${fmtKm(c.remainingKm, unit)} / ${fmtKm(c.distanceKm, unit)}`],
             ['내 상세 경로', c.gpsVisibility === 'crew' ? '크루원' : '나만 보기'],
           ].map(([l, v]) => (
             <View key={l} style={{ minHeight: 50, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -110,6 +111,7 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
 // ---------- 15 GPS 러닝 · 일시정지 · 재개 ----------
 
 export function Running({ navigation, route }: P<'Running'>) {
+  const unit = useUnit();
   const top = useTop();
   const b = useBottom();
   const challengeId = route.params.challengeId;
@@ -275,9 +277,9 @@ export function Running({ navigation, route }: P<'Running'>) {
           </T>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Stat label="거리" value={(dist / 1000).toFixed(2)} unit=" km" />
+          <Stat label="거리" value={kmParts(dist / 1000, unit, 2)[0]} unit={kmParts(dist / 1000, unit, 2)[1]} />
           <Stat label="페이스" value={pace(dist > 20 ? elapsed / (dist / 1000) : null)} />
-          {remaining != null ? <Stat label="남은 구간" value={remaining.toFixed(1)} unit=" km" /> : <Stat label="기록 점" value={String(pts.length)} />}
+          {remaining != null ? <Stat label="남은 구간" value={kmParts(remaining, unit, 1)[0]} unit={kmParts(remaining, unit, 1)[1]} /> : <Stat label="기록 점" value={String(pts.length)} />}
         </View>
         <View style={{ marginTop: 'auto', gap: 10 }}>
           {err ? (
@@ -321,6 +323,7 @@ export function Running({ navigation, route }: P<'Running'>) {
 // ---------- 16 기록 복구 · GPS 공백 ----------
 
 export function Recovery({ navigation }: P<'Recovery'>) {
+  const unit = useUnit();
   const session = useRun((s) => s.session);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -400,7 +403,7 @@ export function Recovery({ navigation }: P<'Recovery'>) {
           <T size={14}>
             마지막 저장 ·{' '}
             <T size={14} rounded>
-              {(distanceOf(pts) / 1000).toFixed(2)}km
+              {fmtKm(distanceOf(pts) / 1000, unit, 2)}
             </T>
           </T>
         </View>
@@ -431,6 +434,7 @@ export function Recovery({ navigation }: P<'Recovery'>) {
 // ---------- 17 저장 · 달력과 진행률 반영 ----------
 
 export function RunSaved({ navigation, route }: P<'RunSaved'>) {
+  const unit = useUnit();
   const qc = useQueryClient();
   const run = useRunQuery(route.params.runId);
   useEffect(() => {
@@ -454,7 +458,7 @@ export function RunSaved({ navigation, route }: P<'RunSaved'>) {
         ? `마지막 구간이 채워져 ${c.shapeLabel}${['고래', '하트', '토끼'].includes(c.shapeLabel) ? '가' : '이'} 완성됐어요. 크루의 완성도와 협력 결과를 정리했어요.`
         : after - before <= 0
           ? '이번 러닝은 그림 경로와 겹치지 않아 진행률에는 반영되지 않았어요. 달력에는 남아요.'
-          : `${c.remainingKm}km가 남았어요. 크루원 누구나 이어서 달릴 수 있어요.`;
+          : `${fmtKm(c.remainingKm, unit)}가 남았어요. 크루원 누구나 이어서 달릴 수 있어요.`;
   return (
     <Screen
       top={80}
@@ -481,7 +485,7 @@ export function RunSaved({ navigation, route }: P<'RunSaved'>) {
           </T>{' '}
           ·{' '}
           <T size={14} color={C.sub} rounded>
-            {r.distanceKm.toFixed(2)}km
+            {fmtKm(r.distanceKm, unit, 2)}
           </T>
         </T>
       </View>

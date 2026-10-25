@@ -133,6 +133,11 @@ function view(){var p=map.getProjection(),el=document.getElementById('m');
   post('view:'+JSON.stringify({nw:[a.getLat(),a.getLng()],se:[b.getLat(),b.getLng()]}))}
 window.setInteractive=function(on){if(map){map.setDraggable(on);map.setZoomable(on)}};
 window.recenter=function(lat,lng){if(map)map.setCenter(new kakao.maps.LatLng(lat,lng))};
+var meDot=null;
+window.me=function(lat,lng){if(!map)return;var at=new kakao.maps.LatLng(lat,lng);
+  if(!meDot){var c=document.createElement('div');c.style.cssText='width:18px;height:18px;border-radius:50%;background:#2F80ED;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 0 8px rgba(47,128,237,.18);';
+    meDot=new kakao.maps.CustomOverlay({position:at,content:c,xAnchor:0.5,yAnchor:0.5,zIndex:3});meDot.setMap(map)}
+  else meDot.setPosition(at)};
 if(typeof kakao==='undefined'){post('fail')}else{
   kakao.maps.load(function(){
     map=new kakao.maps.Map(document.getElementById('m'),{center:new kakao.maps.LatLng(${center[0]},${center[1]}),level:5,draggable:false,scrollwheel:false,disableDoubleClickZoom:true});
@@ -153,6 +158,7 @@ export function KakaoDrawMap({
   h,
   center,
   interactive,
+  me,
   onView,
   fallback,
 }: {
@@ -160,6 +166,8 @@ export function KakaoDrawMap({
   h: number;
   center: LatLng;
   interactive: boolean;
+  /** 내 위치 점 */
+  me?: LatLng | null;
   onView: (v: MapView) => void;
   fallback: ReactNode;
 }) {
@@ -183,6 +191,9 @@ export function KakaoDrawMap({
   useEffect(() => {
     if (state === 'ready') run(`window.recenter(${center[0]},${center[1]})`);
   }, [center[0], center[1], state]);
+  useEffect(() => {
+    if (state === 'ready' && me) run(`window.me(${me[0]},${me[1]})`);
+  }, [me?.[0], me?.[1], state]);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const h = (e: MessageEvent) => typeof e.data === 'string' && e.source === frame.current?.contentWindow && onMsg(e.data);

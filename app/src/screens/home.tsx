@@ -5,20 +5,21 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { api } from '../api/client';
-import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, type Challenge } from '../api/hooks';
+import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, useUnit, type Challenge } from '../api/hooks';
 import { RouteArt } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { useAuth } from '../store/auth';
 import { C } from '../theme';
 import { IcCheck, IcClose, IcDown, IcPlay, IcPlus } from '../ui/icons';
 import { Avatar, Btn, CrewAvatar, ErrorText, Glass, H1, Loading, NavBar, Pill, ProgressBar, Screen, Sheet, Sub, T, TabPage, Tap } from '../ui/kit';
-import { md, Measure, partsOf, pct } from './common';
+import { fmtKm, md, Measure, partsOf, pct } from './common';
 
 type HomeProps = CompositeScreenProps<BottomTabScreenProps<Tabs, 'Home'>, NativeStackScreenProps<Stack>>;
 
 // ---------- 06 크루 홈 ----------
 
 export function Home({ navigation }: HomeProps) {
+  const unit = useUnit();
   const crewId = useCurrentCrewId();
   const crews = useMyCrews();
   const me = useMe();
@@ -134,7 +135,7 @@ export function Home({ navigation }: HomeProps) {
                 {c.name} 코스
               </T>
               <T size={14} weight="600" color={C.sub} rounded>
-                {c.distanceKm} km
+                {fmtKm(c.distanceKm, unit)}
               </T>
             </View>
             <View style={{ gap: 8 }}>

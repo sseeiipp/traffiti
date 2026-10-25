@@ -117,9 +117,9 @@ export function MySettings({ navigation }: P<'MySettings'>) {
               style={{ width: 110, borderRadius: 9 }}
               items={[
                 { key: 'km', label: 'km' },
-                { key: 'mi', label: 'mi' },
+                { key: 'm', label: 'm' },
               ]}
-              value={s.distanceUnit}
+              value={s.distanceUnit === 'm' ? 'm' : 'km'}
               onChange={(v) => save({ distanceUnit: v })}
             />
           }
@@ -149,19 +149,27 @@ export function MySettings({ navigation }: P<'MySettings'>) {
         <Row label="내 크루 · 대표 크루" value={rep?.name} onPress={() => navigation.navigate('CrewSwitcher')} />
       </Group>
 
+      {/* 디자인: 로그아웃은 가운데 빨간 글자 한 줄, 계정 삭제는 그 아래 작은 회색 글자 */}
       <Group style={{ marginTop: 12 }}>
-        <Row
+        <Tap
+          noScale
           label="로그아웃"
-          color={C.danger}
-          center
-          chevron={false}
           onPress={() => {
             qc.clear();
             logout();
           }}
-        />
+          style={{ minHeight: 52, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <T size={16} weight="500" color={C.danger}>
+            로그아웃
+          </T>
+        </Tap>
       </Group>
-      <Btn title="계정 삭제" kind="dangerSoft" onPress={() => navigation.navigate('AccountDelete')} style={{ marginTop: 12 }} />
+      <Tap noScale label="계정 삭제" onPress={() => navigation.navigate('AccountDelete')} style={{ alignSelf: 'center', height: 44, paddingHorizontal: 12, justifyContent: 'center' }}>
+        <T size={14} color={C.sub}>
+          계정 삭제
+        </T>
+      </Tap>
     </Screen>
   );
 }

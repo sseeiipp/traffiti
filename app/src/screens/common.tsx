@@ -76,3 +76,15 @@ export const km1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
 
 /** 진행 막대용: 사람별 비율 */
 export const partsOf = (contributors: { color: string; share: number }[]) => contributors.map((c) => ({ color: c.color, value: c.share }));
+
+/** 거리 표시: 내 설정의 거리 단위(km·m)를 따른다. 서버와 주고받는 값은 늘 km */
+export type DistUnit = 'km' | 'm';
+const comma = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+export const fmtKm = (km: number | null | undefined, unit: DistUnit, digits?: number) =>
+  km == null || Number.isNaN(km) ? '–' : unit === 'm' ? `${comma(Math.round(km * 1000))}m` : `${digits == null ? km : km.toFixed(digits)}km`;
+/** [값, 단위] — 큰 숫자와 작은 단위를 따로 쓰는 카드용 */
+export const kmParts = (km: number | null | undefined, unit: DistUnit, digits?: number, space = true): [string, string] => {
+  const sp = space ? ' ' : '';
+  if (km == null || Number.isNaN(km)) return ['–', sp + unit];
+  return unit === 'm' ? [comma(Math.round(km * 1000)), sp + 'm'] : [digits == null ? String(km) : km.toFixed(digits), sp + 'km'];
+};
