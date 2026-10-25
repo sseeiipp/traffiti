@@ -7,11 +7,11 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-ME-staging-api.example.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-ME-api.example.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app" }
     }
   },
   "submit": {
