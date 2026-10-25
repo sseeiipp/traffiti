@@ -117,7 +117,8 @@ export class RankingsService {
       : await this.latest(type, periodKey, category);
     if (!snap) {
       await this.snapshot(type, periodKey, category);
-      snap = await this.latest(type, periodKey, category);
+      // 기록이 하나도 없던 달은 스냅샷이 비어 있다
+      snap = (await this.latest(type, periodKey, category)) ?? { at: new Date().toISOString(), rows: [] };
     }
     const prev = monthly && category === 'all' ? await this.latest(type, prevMonthKey(periodKey), 'all') : null;
     const crews = await this.db.many(
