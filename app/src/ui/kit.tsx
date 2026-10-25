@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, createContext, ReactNode, useContext, useRef, useState } from 'react';
@@ -8,6 +9,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -623,9 +625,20 @@ export function TabPage({ header, children, gap = 16, single }: { header: ReactN
   const wide = useWide();
   const items = Children.toArray(children).filter(Boolean);
   const cols = wide && !single ? [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)] : null;
+  // 아래로 당기면 이 화면의 데이터를 다시 불러온다
+  const qc = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = () => {
+    setRefreshing(true);
+    qc.refetchQueries({ type: 'active' }).finally(() => setRefreshing(false));
+  };
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.sub} colors={[C.ink]} progressViewOffset={Math.max(58, top + 6)} />}
+      >
         <View
           style={
             wide
