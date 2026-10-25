@@ -110,6 +110,19 @@ export interface Challenge {
   canDelete: boolean;
   /** 직접 그린 코스를 만든 사람이나 크루장: 이름 바꾸기 */
   canRename: boolean;
+  /** 지금 인원수로 경로를 1/n씩 나눠 들어온 순서대로 맡긴 구간(구간 번호 fromSeg 이상 toSeg 미만) */
+  plan: {
+    userId: number;
+    name: string;
+    color: string;
+    isMe: boolean;
+    order: number;
+    fromSeg: number;
+    toSeg: number;
+    km: number;
+    remainingKm: number;
+    part: string;
+  }[];
   startAt: string;
   endAt: string;
   /** 친구 챌린지: 내일 24시까지 연장을 이미 썼는지 */

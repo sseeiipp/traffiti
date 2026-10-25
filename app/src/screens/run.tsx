@@ -46,9 +46,12 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
   const c = ch.data;
   const active = c.status === 'active';
   const leader = crew.data?.myRole === 'leader';
+  // 인원수로 1/n씩 나눈 내 구간. 지도에 내 색으로 굵게 겹쳐 미리 보여준다
+  const mine = active ? c.plan?.find((p) => p.isMe) : undefined;
+  const myLeg = mine ? { points: c.route.slice(mine.fromSeg, mine.toSeg + 1), color: mine.color } : null;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <Measure height={360}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={360} pad={44} seed={c.id} />}</Measure>
+      <Measure height={360}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={360} pad={44} seed={c.id} trail={myLeg} />}</Measure>
       <RoundBtn onPress={() => navigation.goBack()} style={{ position: 'absolute', left: 16, top: top + 2 }} />
       <CourseMenu
         c={c}
@@ -90,6 +93,29 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
             </View>
           ))}
         </Glass>
+        {mine && c.plan.length > 0 ? (
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <T size={15} weight="700">
+                내 구간 · {mine.part}
+              </T>
+              <T size={13} color={C.sub} rounded>
+                {c.plan.length}명이 1/{c.plan.length}씩 · {fmtKm(mine.km, unit)}
+              </T>
+            </View>
+            {/* 경로 순서대로 나눈 구간. 내 구간만 진하게 */}
+            <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 }}>
+              {c.plan.map((p) => (
+                <View key={p.userId} style={{ flex: Math.max(1, p.toSeg - p.fromSeg), backgroundColor: p.color, opacity: p.isMe ? 1 : 0.3 }} />
+              ))}
+            </View>
+            <T size={13} color={C.sub} lh={1.5}>
+              {mine.remainingKm > 0
+                ? `지도에 굵게 표시한 ${mine.order}번째 구간이 내가 맡은 곳이에요. 아직 ${fmtKm(mine.remainingKm, unit)} 남았어요.`
+                : `${mine.order}번째 구간을 다 채웠어요. 남은 다른 구간을 도와도 좋아요.`}
+            </T>
+          </View>
+        ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ flexDirection: 'row' }}>
             {c.contributors.slice(0, 5).map((p, i) => (

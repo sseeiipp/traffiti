@@ -240,12 +240,13 @@ export class ChallengesService {
     const members = ch.crew_id
       ? await this.db.many<{ id: number; name: string; color: string }>(
           `SELECT u.id, u.display_name AS name, m.record_color AS color FROM crew_members m JOIN users u ON u.id = m.user_id
-           WHERE m.crew_id = $1 AND m.left_at IS NULL`,
+           WHERE m.crew_id = $1 AND m.left_at IS NULL ORDER BY m.joined_at, m.id`,
           [ch.crew_id],
           db,
         )
       : await this.db.many<{ id: number; name: string; color: string }>(
-          `SELECT u.id, u.display_name AS name, p.color FROM challenge_participations p JOIN users u ON u.id = p.user_id WHERE p.challenge_id = $1`,
+          `SELECT u.id, u.display_name AS name, p.color FROM challenge_participations p JOIN users u ON u.id = p.user_id
+           WHERE p.challenge_id = $1 ORDER BY p.joined_at, u.id`,
           [id],
           db,
         );
@@ -254,6 +255,25 @@ export class ChallengesService {
     const me = members.find((m) => m.id === userId);
     const firstGap = segs.findIndex((s) => !s);
     const myRole = ch.crew_id ? await this.crews.role(userId, ch.crew_id, db) : null;
+    // 미리 나눈 구간: 지금 인원수 n으로 경로를 1/n씩 이어진 구간으로 나눠 들어온 순서대로 맡긴다.
+    // 인원이 바뀌면 다음 조회부터 다시 나뉜다. 남은 거리는 아직 아무도 채우지 않은 구간만 센다.
+    const plan = members.map((m, i) => {
+      const from = Math.round((i * segCount) / members.length);
+      const to = Math.round(((i + 1) * segCount) / members.length);
+      const left = segs.slice(from, to).filter((s) => !s).length;
+      return {
+        userId: m.id,
+        name: m.name,
+        color: m.color,
+        isMe: m.id === userId,
+        order: i + 1,
+        fromSeg: from,
+        toSeg: to,
+        km: Math.round(((to - from) * SEG_M) / 100) / 10,
+        remainingKm: Math.round((left * SEG_M) / 100) / 10,
+        part: partOf(ch.shape_key, (from + to) / 2 / Math.max(1, segCount)),
+      };
+    });
     return {
       id: ch.id,
       crewId: ch.crew_id,
@@ -294,6 +314,7 @@ export class ChallengesService {
       relays,
       myColor: me?.color ?? null,
       members: members.map((m) => ({ id: m.id, name: m.name, color: m.color })),
+      plan,
     };
   }
 
