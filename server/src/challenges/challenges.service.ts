@@ -11,7 +11,8 @@ import { DbService, Queryable } from '../db/db.service.js';
 import { CrewsService } from '../crews/crews.service.js';
 import { hasBannedWord, pickFreeColor, randomCode } from '../common/util.js';
 import { difficultyOf, shapeByKey, SHAPES } from '../geo/shapes.js';
-import { LatLng, pathLength, projectShape, resample } from '../geo/geometry.js';
+import { LatLng, pathLength, resample } from '../geo/geometry.js';
+import { fitToRoads } from '../geo/routing.js';
 
 /** 경로 한 구간의 길이(m). 진행률은 이 단위로 센다. */
 export const SEG_M = 20;
@@ -53,10 +54,10 @@ export class ChallengesService {
   }
 
   /**
-   * 경로 제안. 지도 SDK·경로 API가 아직 정해지지 않아서 지금은 그림을 그대로 실제 좌표로 옮긴다.
-   * 그래서 '그림과 닮은 정도'는 계산하지 않고 null을 돌려준다(기획 미정 항목).
+   * 경로 제안. 그림을 출발 지점에 맞춰 실제 좌표로 옮긴 뒤, OSRM 도보 경로로 도로를 따라 이어 붙인다.
+   * 경로 서버에 닿지 않으면 그림 선을 그대로 쓰고 닮은 정도는 null로 둔다.
    */
-  suggest(input: RouteInput) {
+  async suggest(input: RouteInput) {
     const start = input.start ?? DEFAULT_START;
     const custom = !!input.customPath;
     const shape = custom ? null : shapeByKey(input.shapeKey ?? '');
@@ -69,16 +70,22 @@ export class ChallengesService {
       };
     }
     const km = Math.min(15, Math.max(1, input.km ?? shape?.km ?? 5));
-    const line = projectShape(custom ? input.customPath! : shape!.path, start, km * 1000);
-    const route = resample(line, SEG_M);
+    const fit = await fitToRoads(custom ? input.customPath! : shape!.path, start, km * 1000);
+    const route = resample(fit.road ?? fit.shape, SEG_M);
     const meters = pathLength(route);
+    const notes: string[] = [];
+    if (!fit.road) notes.push('지금은 도로 경로를 찾지 못해 그림 선을 그대로 보여줘요.');
+    else {
+      if (fit.movedM) notes.push(`하천을 건너지 않도록 그림을 ${fit.movedM}m 옮겼어요.`);
+      if (fit.similarity! < 70) notes.push('길이 없는 곳은 가까운 도로로 돌아가서 그림과 다른 곳이 있어요.');
+    }
     return {
       ok: true as const,
       route,
       distanceKm: Math.round(meters / 100) / 10,
       difficulty: difficultyOf(meters / 1000),
-      similarity: null as number | null,
-      notes: [] as string[],
+      similarity: fit.similarity,
+      notes,
     };
   }
 
@@ -104,7 +111,7 @@ export class ChallengesService {
     if (crew?.challenge_permission === 'leader' && role !== 'leader') {
       throw new ForbiddenException('이 크루는 크루장만 챌린지를 만들 수 있어요.');
     }
-    const r = this.suggest(b);
+    const r = await this.suggest(b);
     if (!r.ok) throw new BadRequestException(r.reason);
     const shapeKey = b.customPath ? 'custom' : b.shapeKey!;
     const title = b.customPath ? '직접 그린 코스' : `${shapeByKey(shapeKey)!.label} 챌린지`;
@@ -306,7 +313,7 @@ export class ChallengesService {
   async createFriend(userId: number, b: { shapeKey: string; start?: LatLng }) {
     const shape = shapeByKey(b.shapeKey);
     if (!shape) throw new BadRequestException('그림을 골라 주세요.');
-    const r = this.suggest({ shapeKey: b.shapeKey, start: b.start });
+    const r = await this.suggest({ shapeKey: b.shapeKey, start: b.start });
     if (!r.ok) throw new BadRequestException(r.reason);
     return this.db.tx(async (c) => {
       for (let i = 0; i < 20; i++) {
