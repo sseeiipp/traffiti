@@ -85,6 +85,8 @@ export class ChallengesService {
       distanceKm: Math.round(meters / 100) / 10,
       difficulty: difficultyOf(meters / 1000),
       similarity: fit.similarity,
+      // 앱이 제안 경로 아래에 원래 그림을 겹쳐 보여줄 수 있게 함께 보낸다
+      target: fit.road ? resample(fit.shape, SEG_M) : null,
       notes,
     };
   }

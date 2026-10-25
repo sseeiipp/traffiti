@@ -60,8 +60,8 @@ export function Intro() {
           position: 'absolute',
           left: 0,
           right: 0,
-          top: 304,
           bottom: 0,
+          maxHeight: '88%',
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
           borderRadius: 0,
@@ -201,8 +201,8 @@ export function AuthStart({ navigation }: P<'AuthStart'>) {
           position: 'absolute',
           left: 0,
           right: 0,
-          top: 344,
           bottom: 0,
+          maxHeight: '88%',
           borderRadius: 0,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
@@ -564,7 +564,11 @@ export function PasswordReset({ navigation }: P<'PasswordReset'>) {
     navigation.goBack();
   });
   return (
-    <Screen gap={22} pad={24}>
+    <Screen
+      gap={22}
+      pad={24}
+      footer={step === 'request' ? <Btn title="재설정 링크 보내기" loading={send.isPending} onPress={() => send.mutate(undefined)} /> : undefined}
+    >
       <NavBar onBack={() => navigation.goBack()} />
       {step === 'request' ? (
         <View style={{ gap: 22 }}>
@@ -573,7 +577,6 @@ export function PasswordReset({ navigation }: P<'PasswordReset'>) {
             <Sub>가입한 이메일로 재설정 링크를 보내드려요.</Sub>
           </View>
           <Field label="이메일" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-          <Btn title="재설정 링크 보내기" loading={send.isPending} onPress={() => send.mutate(undefined)} />
           <ErrorText error={send.error} />
         </View>
       ) : step === 'sent' ? (

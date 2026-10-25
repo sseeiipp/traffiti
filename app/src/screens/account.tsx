@@ -446,7 +446,7 @@ export function AccountDelete({ navigation }: P<'AccountDelete'>) {
       </View>
       <Glass style={{ borderRadius: 20, paddingVertical: 6, paddingHorizontal: 16 }}>
         {items.map(([a, b]) => (
-          <View key={a} style={{ minHeight: 56, justifyContent: 'center', gap: 2, paddingVertical: 6 }}>
+          <View key={a} style={{ minHeight: 68, justifyContent: 'center', gap: 2, paddingVertical: 6 }}>
             <T size={15} weight="600">
               {a}
             </T>

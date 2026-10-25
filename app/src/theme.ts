@@ -33,8 +33,11 @@ export const shadow = {
   selected: '0 10px 28px rgba(101, 163, 13, 0.28), 0 2px 6px rgba(101, 163, 13, 0.16)',
   chipOn: '0 2px 10px rgba(101, 163, 13, 0.28)',
   sheet: '0 20px 50px rgba(0, 0, 0, 0.18)',
-  glass: '0 0 0 0.5px rgba(255, 255, 255, 0.6), 0 4px 18px rgba(0, 0, 0, 0.06)',
-  lime: '0 6px 18px rgba(101, 163, 13, 0.28)',
+  /** 디자인의 liquid-glass: 안쪽 흰 빛 + 두 겹 그림자 */
+  glass: 'inset 0 0 10px rgba(255, 255, 255, 0.5), 0 8px 28px rgba(0, 0, 0, 0.07), 0 2px 8px rgba(0, 0, 0, 0.04)',
+  /** liquid-glass--sheet: 바텀 시트·탭 바처럼 넓은 유리 */
+  glassSheet: 'inset 0 0 10px rgba(255, 255, 255, 0.5), 0 -6px 30px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06)',
+  lime: '0 6px 18px rgba(101, 163, 13, 0.3), 0 1px 3px rgba(54, 83, 20, 0.14)',
 };
 
 export const font = Platform.select({

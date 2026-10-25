@@ -58,6 +58,7 @@ type Line = { pts: LatLng[]; color: string; w: number; op: number; dash: boolean
 function build(p: RouteArtProps) {
   const { route, segments, mode = 'progress', stroke = 6, trail, me, showStart, hideRemaining, pad = 24, insetTop = 0, insetBottom = 0 } = p;
   const lines: Line[] = [];
+  if (p.target && p.target.length > 1) lines.push({ pts: p.target, color: C.target, w: 3, op: 1, dash: true });
   if (mode === 'target') lines.push({ pts: route, color: C.target, w: 3, op: 1, dash: true });
   else if (mode === 'route') lines.push({ pts: route, color: C.ink, w: stroke - 1, op: 1, dash: false });
   else {
@@ -71,7 +72,7 @@ function build(p: RouteArtProps) {
     });
   }
   if (trail && trail.points.length > 1) lines.push({ pts: trail.points, color: trail.color, w: stroke + 1, op: 1, dash: false });
-  const bounds = trail ? [...route, ...trail.points] : route;
+  const bounds = [...route, ...(trail?.points ?? []), ...(p.target ?? [])];
   // 시트 높이가 바뀌어도 다시 맞춘다
   const fitKey = `${route.length}:${route[0]?.join()}:${route[route.length - 1]?.join()}:${insetTop}:${insetBottom}`;
   return { lines, start: showStart ? route[0] ?? null : null, me: me ?? null, bounds, fitKey, pad, insetTop, insetBottom };
@@ -79,7 +80,7 @@ function build(p: RouteArtProps) {
 
 export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'fail'>('loading');
-  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom]);
+  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom, p.target]);
   const page = useMemo(() => html(KAKAO_JS_KEY), []);
   const web = useRef<WebViewHandle>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);

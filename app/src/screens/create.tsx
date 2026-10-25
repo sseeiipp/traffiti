@@ -192,6 +192,25 @@ export function CreateMethod({ navigation }: P<"CreateMethod">) {
           </View>
         </Glass>
       </Tap>
+      {/* 크루 없이 코드로 함께 달리기(13-1)는 만들기 방식 바로 아래에서 들어간다 */}
+      <Tap
+        onPress={() => navigation.navigate("FriendRun")}
+        style={{
+          height: 60,
+          borderRadius: 20,
+          backgroundColor: C.lime,
+          boxShadow: "0 8px 20px rgba(101, 163, 13, 0.3)",
+          paddingHorizontal: 20,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <T size={17} weight="700" style={{ flex: 1 }}>
+          친구와 달리기
+        </T>
+        <IcChevron size={20} color={C.ink} w={2.8} />
+      </Tap>
       <T size={13} color={C.sub} lh={1.5}>
         직접 그린 그림은 길이 없으면 경로가 되지 않을 수 있어요. 그럴 땐 이유와
         다른 방법을 알려드려요.
@@ -769,7 +788,66 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
         >
           {draft.customPath ? (
             <ShapeFromPath d={draft.customPath} size={frame - 8} />
+          ) : draft.shapeKey ? (
+            <ShapeGlyph
+              shape={draft.shapeKey}
+              w={frame - 24}
+              h={frame - 24}
+              color={C.target}
+            />
           ) : null}
+          {/* 크기 조절 핸들 4개와 회전 손잡이 */}
+          {[
+            { left: -7, top: -7 },
+            { right: -7, top: -7 },
+            { left: -7, bottom: -7 },
+            { right: -7, bottom: -7 },
+          ].map((pos, i) => (
+            <View
+              key={i}
+              style={{
+                position: "absolute",
+                ...pos,
+                width: 12,
+                height: 12,
+                borderRadius: 2,
+                borderWidth: 2,
+                borderColor: C.ink,
+                backgroundColor: "#FFFFFF",
+              }}
+            />
+          ))}
+          <View
+            style={{
+              position: "absolute",
+              top: -24,
+              left: frame / 2 - 1.75,
+              width: 1.5,
+              height: 24,
+              backgroundColor: C.ink,
+            }}
+          />
+          <View
+            style={{
+              position: "absolute",
+              top: -38,
+              left: frame / 2 - 9.75,
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              borderWidth: 2,
+              borderColor: C.ink,
+              backgroundColor: "#FFFFFF",
+            }}
+          />
+          <StartPin
+            at={startPoint(
+              draft.customPath,
+              draft.shapeKey,
+              frame,
+              draft.customPath ? frame - 8 : frame - 24,
+            )}
+          />
         </View>
       </View>
       <View
@@ -904,6 +982,86 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   );
 }
 
+// 그림의 첫 점(출발 지점)을 프레임 안 픽셀 좌표로 구한다. ShapeFromPath·ShapeGlyph와 같은 맞춤 규칙
+function startPoint(
+  custom: string | null,
+  shapeKey: string | null,
+  frame: number,
+  size: number,
+): { x: number; y: number } | null {
+  let d: string;
+  let box: number[];
+  if (custom) {
+    d = custom;
+    const nums = d.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
+    if (nums.length < 2) return null;
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
+    box = [Math.min(...xs) - span * 0.1, Math.min(...ys) - span * 0.1, span * 1.2, span * 1.2];
+  } else {
+    const ic = shapeKey ? SHAPE_ICONS[shapeKey] : undefined;
+    if (!ic) return null;
+    d = ic.d;
+    box = ic.box.split(/[\s,]+/).map(Number);
+  }
+  const first = d.match(/-?\d+\.?\d*/g)?.map(Number);
+  if (!first || first.length < 2 || box.length < 4) return null;
+  const k = Math.min(size / box[2], size / box[3]);
+  const ox = (frame - box[2] * k) / 2;
+  const oy = (frame - box[3] * k) / 2;
+  return { x: ox + (first[0] - box[0]) * k, y: oy + (first[1] - box[1]) * k };
+}
+
+// 출발 핀: 검은 원 + 흰 점, 위에 라임 "출발" 라벨
+function StartPin({ at }: { at: { x: number; y: number } | null }) {
+  if (!at) return null;
+  return (
+    <>
+      <View
+        style={{
+          position: "absolute",
+          left: at.x - 1,
+          top: at.y - 22,
+          width: 2,
+          height: 22,
+          backgroundColor: C.ink,
+        }}
+      />
+      <View
+        style={{
+          position: "absolute",
+          left: at.x - 10,
+          top: at.y - 38,
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          backgroundColor: C.ink,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" }} />
+      </View>
+      <View
+        style={{
+          position: "absolute",
+          left: at.x + 14,
+          top: at.y - 40,
+          paddingHorizontal: 7,
+          paddingVertical: 3,
+          borderRadius: 7,
+          backgroundColor: C.lime,
+        }}
+      >
+        <T size={11} weight="600">
+          출발
+        </T>
+      </View>
+    </>
+  );
+}
+
 function ShapeFromPath({ d, size }: { d: string; size: number }) {
   const nums = d.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
   const xs = nums.filter((_, i) => i % 2 === 0);
@@ -941,6 +1099,8 @@ interface Suggestion {
   alternatives?: string[];
   /** 서버가 도로에 맞추며 바꾼 점(그림을 옮김, 도로로 돌아감 등) */
   notes?: string[];
+  /** 도로에 맞추기 전 원래 그림 선. 제안 경로 아래에 빨간 점선으로 겹친다 */
+  target?: LatLng[] | null;
 }
 
 export function RouteReview({ navigation }: P<"RouteReview">) {
@@ -974,6 +1134,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
         {s?.ok && s.route ? (
           <RouteArt
             route={s.route}
+            target={s.target}
             w={W}
             h={H}
             pad={32}
@@ -1008,20 +1169,36 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
           borderRadius: 18,
           flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          gap: 12,
         }}
       >
-        <Svg width={18} height={6}>
-          <Path
-            d="M1 3h16"
-            stroke={C.ink}
-            strokeWidth={3.5}
-            strokeLinecap="round"
-          />
-        </Svg>
-        <T size={12} weight="500">
-          제안 경로
-        </T>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Svg width={18} height={6}>
+            <Path
+              d="M1 3h16"
+              stroke={C.target}
+              strokeWidth={3}
+              strokeDasharray="2 5"
+              strokeLinecap="round"
+            />
+          </Svg>
+          <T size={12} weight="500">
+            그림
+          </T>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Svg width={18} height={6}>
+            <Path
+              d="M1 3h16"
+              stroke={C.ink}
+              strokeWidth={3.5}
+              strokeLinecap="round"
+            />
+          </Svg>
+          <T size={12} weight="500">
+            제안 경로
+          </T>
+        </View>
       </Glass>
       <View
         style={{ position: "absolute", left: 10, right: 10, bottom: 10 }}
@@ -1095,11 +1272,40 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
                 />
                 <StatCard label="난이도" value={s.difficulty ?? ""} plain />
               </View>
+              {s.notes?.length ? (
+                <View style={{ gap: 8 }}>
+                  <T size={13} weight="600">
+                    그림과 다른 곳 {s.notes.length}
+                  </T>
+                  {s.notes.map((n, i) => (
+                    <View
+                      key={n}
+                      style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}
+                    >
+                      <View
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 10,
+                          backgroundColor: "rgba(199, 51, 10, 0.12)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <T size={11} weight="700" color={C.target}>
+                          {i + 1}
+                        </T>
+                      </View>
+                      <T size={13} lh={1.5} color="#3A3A3C" style={{ flex: 1 }}>
+                        {n}
+                      </T>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               <T size={12} color={C.sub} lh={1.5}>
-                {[
-                  ...(s.notes ?? []),
-                  "공사나 통행 제한은 반영되지 않을 수 있어요. 달리기 전에 경로를 한 번 확인해 주세요.",
-                ].join(" ")}
+                공사나 통행 제한은 반영되지 않을 수 있어요. 달리기 전에 경로를 한
+                번 확인해 주세요.
               </T>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <Btn

@@ -117,7 +117,7 @@ export function Gallery({ navigation }: TabP<'Gallery'>) {
             <Glass style={{ borderRadius: 20, padding: 8, gap: 8 }}>
               <View style={{ height: 150, borderRadius: 14, overflow: 'hidden', backgroundColor: C.map.land }}>
                 <Measure height={150}>
-                  {(w) => <RouteArt route={a.route} segments={a.segments} w={w} h={150} pad={14} stroke={6} map={false} hideRemaining={a.status === 'completed'} />}
+                  {(w) => <RouteArt route={a.route} segments={a.segments} w={w} h={150} pad={14} stroke={6} map={false} hideRemaining />}
                 </Measure>
               </View>
               <View style={{ paddingHorizontal: 4, paddingBottom: 4, gap: 2 }}>
@@ -441,21 +441,20 @@ export function CrewRanking({ navigation }: P<'CrewRanking'>) {
             <>
               {rows.length ? (
                 // 한 장의 유리 패널 안에 줄로 나열(순위는 회색 숫자, 화살표 없음)
-                <Glass style={{ borderRadius: 22, paddingVertical: 4 }}>
-                  {rows.map((x, i) => (
+                <Glass style={{ borderRadius: 20, paddingTop: 4, paddingBottom: 4, paddingLeft: 16, paddingRight: 8 }}>
+                  {rows.map((x) => (
                     <Tap
                       key={x.crewId}
                       noScale
                       onPress={() => (x.mine ? navigation.navigate('CrewManage', { crewId: x.crewId }) : navigation.navigate('CrewProfile', { crewId: x.crewId }))}
                       style={{
                         minHeight: 64,
-                        paddingHorizontal: 14,
+                        paddingRight: 8,
+                        borderRadius: 14,
                         flexDirection: 'row',
                         alignItems: 'center',
-                        gap: 12,
+                        gap: 10,
                         backgroundColor: x.mine ? 'rgba(163, 230, 53, 0.22)' : 'transparent',
-                        borderTopWidth: i ? StyleSheet.hairlineWidth : 0,
-                        borderTopColor: C.line,
                       }}
                     >
                       <T size={15} weight="700" rounded color={C.sub2} style={{ width: 22, textAlign: 'center' }}>
@@ -468,7 +467,7 @@ export function CrewRanking({ navigation }: P<'CrewRanking'>) {
                             {x.name}
                           </T>
                           {x.mine ? (
-                            <T size={12} weight="700" color={C.limeText}>
+                            <T size={12} weight="700" color={C.limeText} numberOfLines={1} style={{ flexShrink: 0 }}>
                               우리
                             </T>
                           ) : null}

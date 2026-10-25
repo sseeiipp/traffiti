@@ -1,4 +1,5 @@
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Children, createContext, ReactNode, useContext, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -56,6 +57,8 @@ export function T({ children, size = 15, weight = '400', color = C.ink, rounded,
           lineHeight: lh ? Math.round(size * lh) : undefined,
           textAlign: center ? 'center' : undefined,
           letterSpacing: ls != null ? ls * size : undefined,
+          // 안드로이드는 글꼴 위아래 여백을 더해 글자가 디자인보다 커 보이고 줄이 어긋난다
+          includeFontPadding: false,
         },
         rounded && { fontVariant: ['tabular-nums'] },
         style,
@@ -139,7 +142,7 @@ export function Glass({
   return (
     <View
       style={[
-        { borderRadius: radius, boxShadow: kind === 'lime' ? shadow.lime : shadow.glass },
+        { borderRadius: radius, boxShadow: kind === 'lime' ? shadow.lime : kind === 'sheet' ? shadow.glassSheet : shadow.glass },
         style,
         // zIndex 0으로 쌓임 맥락을 만들어 흐림 층(zIndex -1)이 배경 위·내용 아래에 그려지게 한다
         { backgroundColor: flat.backgroundColor ?? bg, overflow: 'hidden', zIndex: flat.zIndex ?? 0 },
@@ -681,6 +684,9 @@ export function Screen({
       )}
       {footer ? (
         <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center' }}>
+          {/* 디자인처럼 위 20px은 투명에서 흰색으로 이어져 스크롤된 내용이 버튼 뒤로 비치지 않게 한다 */}
+          <LinearGradient colors={['rgba(255, 255, 255, 0)', '#FFFFFF']} locations={[0, 1]} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20 }} pointerEvents="none" />
+          <View style={{ position: 'absolute', left: 0, right: 0, top: 20, bottom: 0, backgroundColor: '#FFFFFF' }} pointerEvents="none" />
           <View style={[{ width: '100%', paddingTop: 12, paddingHorizontal: pad, paddingBottom: b, gap: 8 }, center]}>{footer}</View>
         </View>
       ) : null}

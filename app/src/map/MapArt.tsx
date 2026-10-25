@@ -46,7 +46,7 @@ export function MapBackdrop({ w, h, seed = 0, water = true }: { w: number; h: nu
   );
 }
 
-function project(route: LatLng[], w: number, h: number, pad: number) {
+function project(route: LatLng[], w: number, h: number, pad: number, insetTop = 0, insetBottom = 0) {
   const lat0 = route[0]?.[0] ?? 37.5;
   const k = Math.cos((lat0 * Math.PI) / 180);
   const xs = route.map((p) => p[1] * k);
@@ -55,9 +55,10 @@ function project(route: LatLng[], w: number, h: number, pad: number) {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const scale = Math.min((w - pad * 2) / (maxX - minX || 1), (h - pad * 2) / (maxY - minY || 1));
+  const avail = Math.max(h - insetTop - insetBottom, pad * 2 + 1);
+  const scale = Math.min((w - pad * 2) / (maxX - minX || 1), (avail - pad * 2) / (maxY - minY || 1));
   const ox = (w - (maxX - minX) * scale) / 2;
-  const oy = (h - (maxY - minY) * scale) / 2;
+  const oy = insetTop + (avail - (maxY - minY) * scale) / 2;
   const f = (p: LatLng): [number, number] => [ox + (p[1] * k - minX) * scale, oy + (-p[0] - minY) * scale];
   return f;
 }
@@ -84,7 +85,9 @@ export interface RouteArtProps {
   showStart?: boolean;
   /** 남은 구간 점선 숨기기(공유 이미지) */
   hideRemaining?: boolean;
-  /** 지도가 화면을 꽉 채울 때 위·아래에 떠 있는 요소 높이. 경로를 그 사이에 맞춘다(카카오맵만) */
+  /** 경로 아래에 겹쳐 그리는 원래 그림(빨간 점선) */
+  target?: LatLng[] | null;
+  /** 지도가 화면을 꽉 채울 때 위·아래에 떠 있는 요소 높이. 경로를 그 사이에 맞춘다 */
   insetTop?: number;
   insetBottom?: number;
 }
@@ -111,10 +114,13 @@ function SvgRouteArt({
   trail,
   showStart,
   hideRemaining,
+  target,
+  insetTop = 0,
+  insetBottom = 0,
 }: RouteArtProps) {
   const groups = useMemo(() => {
     if (!route.length) return { f: null, runs: [] as { color: string | null; pts: [number, number][] }[] };
-    const f = project(trail ? [...route, ...trail.points] : route, w, h, pad);
+    const f = project([...route, ...(trail?.points ?? []), ...(target ?? [])], w, h, pad, insetTop, insetBottom);
     const segs = segments ?? route.slice(1).map(() => null);
     const runs: { color: string | null; pts: [number, number][] }[] = [];
     segs.forEach((c, i) => {
@@ -125,7 +131,7 @@ function SvgRouteArt({
       else runs.push({ color: c, pts: [a, b] });
     });
     return { f, runs };
-  }, [route, segments, w, h, pad, trail]);
+  }, [route, segments, w, h, pad, trail, target, insetTop, insetBottom]);
 
   if (!groups.f) return <Svg width={w} height={h}>{map ? <MapBackdrop w={w} h={h} seed={seed} /> : null}</Svg>;
   const f = groups.f;
@@ -134,6 +140,7 @@ function SvgRouteArt({
     <Svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
       {map ? <MapBackdrop w={w} h={h} seed={seed} /> : bg ? <Rect width={w} height={h} fill={bg} /> : null}
       <G fill="none" strokeLinecap="round" strokeLinejoin="round">
+        {target && target.length > 1 ? <Path d={toD(target.map(f))} stroke={C.target} strokeWidth={3} strokeDasharray="2 7" /> : null}
         {mode === 'target' ? (
           <Path d={toD(route.map(f))} stroke={C.target} strokeWidth={3} strokeDasharray="2 7" />
         ) : mode === 'route' ? (

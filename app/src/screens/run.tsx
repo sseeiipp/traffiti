@@ -53,7 +53,7 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
           <IcMore />
         </RoundBtn>
       ) : null}
-      <Glass kind="sheet" style={{ position: 'absolute', left: 0, right: 0, top: 324, bottom: 0, borderRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 26, paddingHorizontal: 20, paddingBottom: b, gap: 18 }}>
+      <Glass kind="sheet" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '88%', borderRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 26, paddingHorizontal: 20, paddingBottom: b, gap: 18 }}>
         <View style={{ gap: 4 }}>
           <H1 size={26}>{c.title}</H1>
           <T size={13} color={C.sub}>
@@ -259,7 +259,7 @@ export function Running({ navigation, route }: P<'Running'>) {
           </T>
         </Glass>
       ) : null}
-      <Glass kind="sheet" style={{ position: 'absolute', left: 0, right: 0, top: 528, bottom: 0, borderRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 24, paddingHorizontal: 24, paddingBottom: b, gap: 18 }}>
+      <Glass kind="sheet" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '88%', borderRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 24, paddingHorizontal: 24, paddingBottom: b, gap: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <View style={{ gap: 2 }}>
             <T size={12} color={C.sub}>

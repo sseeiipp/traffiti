@@ -3,14 +3,14 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { api } from '../api/client';
 import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, type Challenge } from '../api/hooks';
 import { RouteArt } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { useAuth } from '../store/auth';
 import { C } from '../theme';
-import { IcCheck, IcChevron, IcClose, IcDown, IcPlay, IcPlus } from '../ui/icons';
+import { IcCheck, IcClose, IcDown, IcPlay, IcPlus } from '../ui/icons';
 import { Avatar, Btn, CrewAvatar, ErrorText, Glass, H1, Loading, NavBar, Pill, ProgressBar, Screen, Sheet, Sub, T, TabPage, Tap } from '../ui/kit';
 import { md, Measure, partsOf, pct } from './common';
 
@@ -27,6 +27,8 @@ export function Home({ navigation }: HomeProps) {
   const friend = useFriendCurrent();
   const setAuth = useAuth((s) => s.set);
   const [crewSheet, setCrewSheet] = useState(false);
+  // 크루 이름은 화면 폭에 맞춰 22~32px(디자인 clamp(22px, 6.4vw, 32px))
+  const titleSize = Math.round(Math.min(32, Math.max(22, useWindowDimensions().width * 0.064)));
   const crew = crews.data?.crews.find((c) => c.id === crewId);
   if (!crew || !crews.data) return <Loading />;
   const c = ch.data;
@@ -90,7 +92,7 @@ export function Home({ navigation }: HomeProps) {
               label={`크루 바꾸기, 지금 ${crew.name}`}
               style={{ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
-              <T size={32} weight="700" ls={-0.025} numberOfLines={1} style={{ flexShrink: 1 }}>
+              <T size={titleSize} weight="700" ls={-0.025} numberOfLines={1} style={{ flexShrink: 1 }}>
                 {crew.name}
               </T>
               <IcDown />
@@ -202,15 +204,6 @@ export function Home({ navigation }: HomeProps) {
             ) : null}
           </View>
         </View>
-        <Tap
-          onPress={() => navigation.navigate('FriendRun')}
-          style={{ height: 52, borderRadius: 16, backgroundColor: C.soft, paddingLeft: 16, paddingRight: 14, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-        >
-          <T size={15} weight="600" style={{ flex: 1 }}>
-            친구와 달리기
-          </T>
-          <IcChevron />
-        </Tap>
       </View>
     </TabPage>
     </>
