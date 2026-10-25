@@ -413,7 +413,7 @@ export function CrewInvite({ navigation, route }: P<'CrewInvite'>) {
   return (
     <Screen
       gap={14}
-      footer={<Btn title="초대 링크 보내기" onPress={() => Share.share({ message: `${crew.data.name}에서 트래비티로 함께 그림 그려요! 초대 코드 ${code} · ${link}` }).catch(() => {})} />}
+      footer={<Btn title="초대 링크 보내기" onPress={() => Share.share({ message: `${crew.data.name}에서 트래피티로 함께 그림 그려요! 초대 코드 ${code} · ${link}` }).catch(() => {})} />}
     >
       <NavBar onBack={() => navigation.goBack()} />
       <View style={{ gap: 6 }}>

@@ -938,7 +938,7 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
   if (s.date) parts.push(`${c.crewName ?? '친구 챌린지'} · ${ymd(c.startAt)} – ${ymd(c.completedAt ?? c.endAt).slice(5)}`);
   if (s.names) parts.push(c.contributors.map((x) => x.name).join(' · '));
   if (s.exact) parts.push(`${c.startLabel} 출발`);
-  const caption = parts.length ? parts.join(' · ') : '트래비티로 함께 그린 작품';
+  const caption = parts.length ? parts.join(' · ') : '트래피티로 함께 그린 작품';
   const link = `https://example.com/a/${c.id}`; // 앱 링크 미정(기획서)
   const defs: [string, string, string][] = [
     ['map', '지도 배경', '도로 모양만, 지명 없이'],

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "트래비티",
+    "name": "Traffiti",
     "slug": "travity",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -32,8 +32,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "트래비티",
-      "shortName": "트래비티",
+      "name": "Traffiti",
+      "shortName": "Traffiti",
       "themeColor": "#A3E635",
       "backgroundColor": "#FFFFFF"
     },

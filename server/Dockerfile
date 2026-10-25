@@ -1,4 +1,4 @@
-# 트래비티 API — Railway·Render·Fly 등 컨테이너 호스팅용
+# 트래피티 API — Railway·Render·Fly 등 컨테이너 호스팅용
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

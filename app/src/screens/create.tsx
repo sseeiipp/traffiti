@@ -1731,7 +1731,7 @@ export function FriendRun({ navigation }: P<"FriendRun">) {
         onPress={async () => {
           if (made)
             await Clipboard.setStringAsync(
-              `트래비티에서 함께 그림 그리러 가요! 코드 ${made.code} · ${FRIEND_LINK(made.code)}`,
+              `트래피티에서 함께 그림 그리러 가요! 코드 ${made.code} · ${FRIEND_LINK(made.code)}`,
             );
           setCopied(true);
         }}
