@@ -340,6 +340,8 @@ export class ChallengesService {
     if (ch.created_by !== userId && role !== 'leader') throw new ForbiddenException('만든 사람이나 크루장만 지울 수 있어요.');
     await this.db.tx(async (c) => {
       await c.query(`UPDATE crew_xp_transactions SET challenge_id = NULL WHERE challenge_id = $1`, [id]);
+      // 달린 거리 합계는 남기되, 지운 작품의 러닝은 달력에서 숨긴다
+      await c.query(`UPDATE runs SET challenge_deleted = true WHERE challenge_id = $1`, [id]);
       await c.query(`DELETE FROM challenges WHERE id = $1`, [id]);
     });
     return { ok: true };

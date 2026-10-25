@@ -235,4 +235,8 @@ ALTER TABLE crews ADD COLUMN IF NOT EXISTS photo_url TEXT;
 -- 업로드 연결 전의 '사진 있음' 표시(예시 그림)는 실제 사진이 없으니 지운다
 UPDATE crews SET has_photo = false WHERE has_photo AND photo_url IS NULL;
 UPDATE users SET profile_image_url = NULL WHERE profile_image_url = 'placeholder';
+-- 지운 작품의 러닝: 거리 합계·XP는 남기고 달력에서만 숨긴다
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS challenge_deleted BOOLEAN NOT NULL DEFAULT false;
+-- 이 표시 전에 지운 작품의 러닝: 챌린지 진행률이 기록됐는데 챌린지 연결이 끊긴 것
+UPDATE runs SET challenge_deleted = true WHERE challenge_id IS NULL AND progress_before IS NOT NULL AND NOT challenge_deleted;
 `;

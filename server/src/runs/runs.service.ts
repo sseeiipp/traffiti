@@ -225,7 +225,7 @@ export class RunsService {
     const rows = await this.db.many(
       `SELECT r.id, r.started_at, r.duration_s, r.distance_m, r.segment_label, ch.title AS challenge_title, ch.id AS challenge_id
        FROM runs r LEFT JOIN challenges ch ON ch.id = r.challenge_id
-       WHERE r.user_id = $1 AND r.status = 'saved' AND to_char(r.started_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM') = $2
+       WHERE r.user_id = $1 AND r.status = 'saved' AND NOT r.challenge_deleted AND to_char(r.started_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM') = $2
        ORDER BY r.started_at`,
       [userId, month],
     );
