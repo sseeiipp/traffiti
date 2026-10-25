@@ -3,6 +3,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { monthKey, useMe, useRun, useRunsMonth } from '../api/hooks';
 import { RouteArt, ShapeGlyph, type LatLng } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
@@ -30,6 +31,7 @@ export function Calendar({ navigation }: CalProps) {
     byDay.set(d, [...(byDay.get(d) ?? []), r]);
   }
   const list = byDay.get(sel) ?? [];
+  const isToday = (d: number) => y === today.getFullYear() && m === today.getMonth() && d === today.getDate();
   const move = (k: number) => {
     setCursor(new Date(y, m + k, 1));
     setSel(1);
@@ -84,7 +86,13 @@ export function Calendar({ navigation }: CalProps) {
               >
                 {({ pressed }) => (
                   <>
-                    <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.lime : pressed ? C.limeSoft : 'transparent' }}>
+                    {/* 기기마다 View의 둥근 모서리가 네모로 보이는 경우가 있어 원은 SVG로 그린다 */}
+                    <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+                      {on || pressed || isToday(d) ? (
+                        <Svg width={32} height={32} style={{ position: 'absolute' }}>
+                          <Circle cx={16} cy={16} r={on || pressed ? 16 : 15} fill={on ? C.lime : pressed ? C.limeSoft : 'none'} stroke={on || pressed ? 'none' : C.lime} strokeWidth={1.5} />
+                        </Svg>
+                      ) : null}
                       <T size={14} weight={on ? '700' : '500'} rounded>
                         {d}
                       </T>
