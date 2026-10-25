@@ -803,13 +803,20 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   const [here, setHere] = useState<LatLng | null>(null);
   const barH = top + 56;
   const mapH = Math.max(320, H - sheetH + 30);
-  const frame = Math.round(
-    Math.max(140, Math.min(W * 0.61, H - sheetH - barH - 56)),
-  );
+  // 그림 크기 막대는 틀 크기(최대의 40~100%)를 정한다. 실제 길이는 틀 크기 × 지도 축척
+  const [scale, setScale] = useState(85);
+  const frameMax = Math.max(140, Math.min(W * 0.61, H - sheetH - barH - 56));
+  const frame = Math.round(frameMax * (scale / 100));
   const fx = (W - frame) / 2;
   const fy = barH + (H - sheetH - barH - frame) / 2 + 12;
   const inner = draft.customPath ? frame - 8 : frame - 24;
   const pin = startPoint(draft.customPath, draft.shapeKey, frame, inner);
+  // 지도 화면 1px이 몇 m인지. 지도를 확대·축소하면 같은 틀이라도 달릴 거리가 달라진다
+  const mPerPx = view
+    ? ((view.se[1] - view.nw[1]) * 111320 * Math.cos((view.nw[0] * Math.PI) / 180)) / W
+    : 2600 / W;
+  const rawKm = (shapePerimeter(draft.customPath, draft.shapeKey, inner) * mPerPx) / 1000;
+  const km = Math.round(Math.max(1, Math.min(15, rawKm)) * 10) / 10;
   // 출발 핀이 가리키는 화면 위치 → 지도 좌표
   const pinGeo = (v: MapView | null): LatLng | null => {
     if (!v || !pin) return null;
@@ -1109,21 +1116,23 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
               <T size={13} color={C.sub}>
                 선 길이 약{" "}
                 <T size={13} weight="700" rounded>
-                  {fmtKm(draft.km ?? 5.2, unit, 1)}
+                  {fmtKm(km, unit, 1)}
                 </T>
               </T>
             </View>
-            <Slider
-              value={draft.km ?? 5.2}
-              min={1}
-              max={15}
-              onChange={(v) => draft.set({ km: v })}
-            />
+            <Slider value={scale} min={40} max={100} onChange={setScale} />
+            <T size={12} color={rawKm > 15.5 || rawKm < 0.9 ? C.danger : C.sub}>
+              {rawKm > 15.5
+                ? "그림이 너무 커요. 지도를 확대하거나 크기를 줄여 주세요. (최대 15km)"
+                : rawKm < 0.9
+                  ? "그림이 너무 작아요. 지도를 축소하거나 크기를 키워 주세요. (최소 1km)"
+                  : "지도를 확대·축소하면 그림이 덮는 넓이만큼 달릴 거리가 바뀌어요."}
+            </T>
           </View>
           <Btn
             title="이 위치에서 경로 찾기"
             onPress={() => {
-              draft.set({ start });
+              draft.set({ start, km });
               navigation.navigate("RouteReview");
             }}
           />
@@ -1162,6 +1171,31 @@ function startPoint(
   const ox = (frame - box[2] * k) / 2;
   const oy = (frame - box[3] * k) / 2;
   return { x: ox + (first[0] - box[0]) * k, y: oy + (first[1] - box[1]) * k };
+}
+
+// 틀 안에 그린 그림의 둘레(px). startPoint·ShapeFromPath·ShapeGlyph와 같은 맞춤 규칙
+function shapePerimeter(custom: string | null, shapeKey: string | null, size: number) {
+  let d: string;
+  let k: number;
+  if (custom) {
+    d = custom;
+    const nums = d.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
+    k = size / (span * 1.2);
+  } else {
+    const ic = shapeKey ? SHAPE_ICONS[shapeKey] : undefined;
+    if (!ic) return 0;
+    d = ic.d;
+    const box = ic.box.split(/[\s,]+/).map(Number);
+    k = Math.min(size / box[2], size / box[3]);
+  }
+  const n = d.match(/-?\d+\.?\d*/g)?.map(Number) ?? [];
+  let len = 0;
+  for (let i = 2; i + 1 < n.length; i += 2) len += Math.hypot(n[i] - n[i - 2], n[i + 1] - n[i - 1]);
+  if (n.length >= 4) len += Math.hypot(n[0] - n[n.length - 2], n[1] - n[n.length - 1]);
+  return len * k;
 }
 
 // 출발 핀: 검은 원 + 흰 점, 위에 라임 "출발" 라벨
