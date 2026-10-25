@@ -78,14 +78,20 @@ export function Calendar({ navigation }: CalProps) {
                 key={d}
                 accessibilityLabel={`${m + 1}월 ${d}일${kind ? ', 러닝 기록 있음' : ''}`}
                 onPress={() => setSel(d)}
+                // 안드로이드 터치 효과가 칸 전체를 네모로 칠하지 않게 끄고, 누르는 동안 날짜 원을 연두색으로 칠한다
+                android_ripple={{ color: 'transparent' }}
                 style={{ width: `${100 / 7}%`, height: 46, alignItems: 'center', justifyContent: 'center', gap: 3 }}
               >
-                <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.lime : 'transparent' }}>
-                  <T size={14} weight={on ? '700' : '500'} rounded>
-                    {d}
-                  </T>
-                </View>
-                <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: kind === 'c' ? '#7A5AF8' : kind === 'p' ? C.sub3 : 'transparent' }} />
+                {({ pressed }) => (
+                  <>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? C.lime : pressed ? C.limeSoft : 'transparent' }}>
+                      <T size={14} weight={on ? '700' : '500'} rounded>
+                        {d}
+                      </T>
+                    </View>
+                    <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: kind === 'c' ? '#7A5AF8' : kind === 'p' ? C.sub3 : 'transparent' }} />
+                  </>
+                )}
               </Pressable>
             );
           })}
