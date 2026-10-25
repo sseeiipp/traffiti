@@ -35,13 +35,15 @@ function MainTabs() {
 const sheet = { presentation: 'transparentModal' as const, animation: 'fade' as const };
 
 export function Root() {
-  const { hydrated, accessToken, introSeen } = useAuth();
+  const { hydrated, accessToken, introSeen, crewSkipped } = useAuth();
   const crews = useMyCrews();
   // 앱을 열었을 때 끝나지 않은 러닝이 있으면 복구 화면부터
   const recover = useRef(!!useRun.getState().session?.runId).current;
 
   if (!hydrated || (accessToken && crews.isLoading)) return <Loading />;
   const hasCrew = (crews.data?.crews.length ?? 0) > 0;
+  // 크루가 없어도 '크루 없이 하기'를 골랐으면 홈부터
+  const setupFirst = !hasCrew && !crewSkipped;
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }}>
@@ -59,9 +61,9 @@ export function Root() {
       ) : (
         <Stack.Group>
           {recover ? <Stack.Screen name="Recovery" component={Run.Recovery} /> : null}
-          {!hasCrew ? <Stack.Screen name="CrewSetup" component={O.CrewSetup} /> : null}
+          {setupFirst ? <Stack.Screen name="CrewSetup" component={O.CrewSetup} /> : null}
           <Stack.Screen name="Tabs" component={MainTabs} />
-          {hasCrew ? <Stack.Screen name="CrewSetup" component={O.CrewSetup} /> : null}
+          {!setupFirst ? <Stack.Screen name="CrewSetup" component={O.CrewSetup} /> : null}
           <Stack.Screen name="LocationNeeded" component={O.LocationNeeded} options={sheet} />
           <Stack.Screen name="MySettings" component={A.MySettings} />
           <Stack.Screen name="ProfileEdit" component={A.ProfileEdit} options={{ presentation: 'modal' }} />

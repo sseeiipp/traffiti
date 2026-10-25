@@ -617,6 +617,17 @@ export function PasswordReset({ navigation }: P<'PasswordReset'>) {
 
 // ---------- 05 크루 만들기 · 참여 ----------
 
+/** 역지오코딩 결과에서 '구 동'을 뽑는다. 기기마다 담기는 칸이 달라 모든 칸을 훑는다 */
+function areaName(a: Location.LocationGeocodedAddress): { key: string; full: string } | null {
+  const parts = [a.district, a.subregion, a.city, a.street, a.name, a.region].filter((p): p is string => !!p).flatMap((p) => p.split(' '));
+  const gu = parts.find((p) => /(구|군)$/.test(p)) ?? parts.find((p) => /시$/.test(p) && !/(특별|광역)시$/.test(p)) ?? '';
+  const raw = parts.find((p) => /(동|읍|면|\d가|리)$/.test(p)) ?? '';
+  const dong = raw.replace(/^(.+?동)\d*가$/, '$1').replace(/^(.+?)\d+동$/, '$1동');
+  const key = dong || gu;
+  if (!key) return null;
+  return { key, full: [gu, dong].filter(Boolean).join(' ') };
+}
+
 export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
   const qc = useQueryClient();
   const setAuth = useAuth((s) => s.set);
@@ -628,13 +639,46 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
   const [photo, setPhoto] = useState(false);
   const [area, setArea] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
-  const AREAS = [
-    { key: '성수동', full: '성동구 성수동' },
-    { key: '서울숲', full: '성동구 서울숲 일대' },
-    { key: '뚝섬', full: '광진구 자양동 뚝섬' },
-    { key: '송정동', full: '성동구 송정동' },
-    { key: '왕십리', full: '성동구 왕십리' },
-  ];
+  // 주로 달리는 지역: 지금 위치와 주변 네 방향(약 1.5km)을 동 이름으로 바꿔 고른다
+  const [AREAS, setAreas] = useState<{ key: string; full: string }[]>([]);
+  const [locating, setLocating] = useState(false);
+  const [locErr, setLocErr] = useState<string | null>(null);
+  const [typedArea, setTypedArea] = useState('');
+  const locate = async () => {
+    setLocating(true);
+    setLocErr(null);
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) throw new Error('위치 권한을 허용하면 지금 지역을 찾아 드려요. 직접 입력해도 돼요.');
+      const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const d = 0.0135;
+      const pts = [
+        [0, 0],
+        [d, 0],
+        [-d, 0],
+        [0, d * 1.25],
+        [0, -d * 1.25],
+      ];
+      const found: { key: string; full: string }[] = [];
+      for (const [dy, dx] of pts) {
+        const [a] = await Location.reverseGeocodeAsync({ latitude: coords.latitude + dy, longitude: coords.longitude + dx }).catch(() => []);
+        const r = a ? areaName(a) : null;
+        if (r && !found.some((f) => f.key === r.key)) found.push(r);
+      }
+      if (!found.length) throw new Error('지금 위치의 지역 이름을 찾지 못했어요. 직접 입력해 주세요.');
+      setAreas(found);
+      setArea(0);
+    } catch (e) {
+      setLocErr((e as Error).message || '위치를 찾지 못했어요. 직접 입력해 주세요.');
+    } finally {
+      setLocating(false);
+    }
+  };
+  useEffect(() => {
+    if (mode === 'create' && !AREAS.length && !locating && !locErr) locate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+  const region = AREAS[area]?.full ?? typedArea.trim();
 
   useEffect(() => {
     setPreview(null);
@@ -659,12 +703,12 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
     navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
   });
   const create = useAction(async () => {
-    const r = await api('/crews', { body: { name, hasPhoto: photo, region: AREAS[area].full } });
+    const r = await api('/crews', { body: { name, hasPhoto: photo, region } });
     await done(r.id);
     navigation.reset({ index: 1, routes: [{ name: 'Tabs' }, { name: 'CrewInvite', params: { crewId: r.id } }] });
   });
 
-  const ready = mode === 'create' ? name.trim().length > 0 : !!preview;
+  const ready = mode === 'create' ? name.trim().length > 0 && !!region : !!preview;
   const cta = mode === 'join' ? (preview ? `${preview.name}에 참여하기` : '코드를 넣어 주세요') : '크루 만들고 초대하기';
   return (
     <Screen
@@ -717,7 +761,14 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
             </T>
           ) : null}
           <ErrorText error={join.error} />
-          <TextLink title="크루 없이 친구와 먼저 달려볼게요" onPress={() => navigation.navigate('FriendRun')} style={{ alignSelf: 'flex-start' }} />
+          <TextLink
+            title="크루 없이 하기"
+            onPress={() => {
+              useAuth.getState().set({ crewSkipped: true });
+              navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+            }}
+            style={{ alignSelf: 'flex-start' }}
+          />
         </View>
       ) : (
         <View style={{ gap: 16 }}>
@@ -756,29 +807,48 @@ export function CrewSetup({ navigation, route }: P<'CrewSetup'>) {
             </T>
             <Glass style={{ borderRadius: 20, paddingVertical: 14, paddingLeft: 16, paddingRight: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ flex: 1, gap: 2 }}>
-                <T size={17} weight="600">
-                  {AREAS[area].full}
-                </T>
-                <T size={13} color={C.sub}>
-                  {area === 0 ? '지금 위치에서 찾았어요' : '지금 위치 근처 지역'}
-                </T>
+                {AREAS.length ? (
+                  <>
+                    <T size={17} weight="600">
+                      {AREAS[area].full}
+                    </T>
+                    <T size={13} color={C.sub}>
+                      {area === 0 ? '지금 위치에서 찾았어요' : '지금 위치 근처 지역'}
+                    </T>
+                  </>
+                ) : locating ? (
+                  <T size={15} color={C.sub}>
+                    지금 위치를 찾고 있어요
+                  </T>
+                ) : (
+                  <Field value={typedArea} onChangeText={(t) => setTypedArea(t.slice(0, 24))} placeholder="예: 성동구 성수동" height={44} />
+                )}
               </View>
               <Tap
-                onPress={() => setArea(0)}
+                onPress={() => (AREAS.length ? setArea(0) : locate())}
                 label="현재 위치로 다시 찾기"
                 style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', boxShadow: shadow.soft }}
               >
                 <IcLocate size={20} />
               </Tap>
             </Glass>
-            <T size={13} color={C.sub}>
-              근처 지역
-            </T>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {AREAS.map((a, i) => (
-                <Chip key={a.key} label={a.key} on={i === area} onPress={() => setArea(i)} />
-              ))}
-            </View>
+            {locErr ? (
+              <T size={13} color={C.sub} lh={1.5}>
+                {locErr}
+              </T>
+            ) : null}
+            {AREAS.length > 1 ? (
+              <>
+                <T size={13} color={C.sub}>
+                  근처 지역
+                </T>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {AREAS.map((a, i) => (
+                    <Chip key={a.key} label={a.key} on={i === area} onPress={() => setArea(i)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
           </View>
           <ErrorText error={create.error} />
         </View>

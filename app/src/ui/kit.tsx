@@ -589,7 +589,8 @@ export function CodeCells({ value, onChange, label }: { value: string; onChange:
         caretHidden
         style={[
           StyleSheet.absoluteFill,
-          { color: 'transparent', backgroundColor: 'transparent', fontSize: 16 },
+          // 안드로이드는 color: transparent만으로는 글자가 비쳐 보여 입력칸 자체를 투명하게 만든다
+          { color: 'transparent', backgroundColor: 'transparent', fontSize: 16, opacity: 0 },
           Platform.OS === 'web' && ({ outlineStyle: 'none', caretColor: 'transparent' } as any),
         ]}
       />

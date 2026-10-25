@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, PanResponder, Pressable, View } from 'react-native';
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { MapBackdrop } from '../map/MapArt';
 import { SHAPE_ICONS } from '../map/shapes';
@@ -200,8 +200,21 @@ export function Onboard({ navigation }: P<'Onboard'>) {
   const s = SLIDES[i];
   const up = prog(t, 100, 600);
   const done = () => navigation.replace('Intro');
+  // 옆으로 밀어서 넘기기: 왼쪽으로 밀면 다음(마지막이면 시작), 오른쪽으로 밀면 이전
+  const go = useRef({ i, done });
+  go.current = { i, done };
+  const swipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderRelease: (_, g) => {
+        const { i: k, done: end } = go.current;
+        if (g.dx < -50 || g.vx < -0.5) (k < SLIDES.length - 1 ? setI(k + 1) : end());
+        else if ((g.dx > 50 || g.vx > 0.5) && k > 0) setI(k - 1);
+      },
+    }),
+  ).current;
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={{ flex: 1, backgroundColor: C.bg }} {...swipe.panHandlers}>
       <View style={{ marginTop: top + 2, height: 44, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
         <Tap noScale onPress={done} style={{ minHeight: 44, paddingHorizontal: 4, justifyContent: 'center' }}>
           <T size={15} weight="500" color={C.sub}>

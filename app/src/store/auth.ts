@@ -13,6 +13,8 @@ interface AuthState {
   deviceId: string;
   /** 지금 보고 있는 크루(대표 크루와 다를 수 있다) */
   crewId: number | null;
+  /** 가입 뒤 크루 정하기에서 '크루 없이 하기'를 골랐는지. 다음에 열 때 바로 홈으로 */
+  crewSkipped: boolean;
   /** 가입 진행 중인 정보(03-0 → 03-1 → 03-2) */
   signup: {
     provider: Provider;
@@ -36,16 +38,17 @@ export const useAuth = create<AuthState>()(
       introSeen: false,
       deviceId: `device-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`,
       crewId: null,
+      crewSkipped: false,
       signup: null,
       hydrated: false,
       setTokens: (t) => set({ accessToken: t.accessToken, refreshToken: t.refreshToken }),
-      logout: () => set({ accessToken: null, refreshToken: null, crewId: null, signup: null }),
+      logout: () => set({ accessToken: null, refreshToken: null, crewId: null, crewSkipped: false, signup: null }),
       set: (p) => set(p),
     }),
     {
       name: 'crew-auth',
       storage,
-      partialize: ({ accessToken, refreshToken, introSeen, deviceId, crewId }) => ({ accessToken, refreshToken, introSeen, deviceId, crewId }),
+      partialize: ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped }) => ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped }),
       onRehydrateStorage: () => () => useAuth.setState({ hydrated: true }),
     },
   ),
