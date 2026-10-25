@@ -30,7 +30,9 @@ export function Home({ navigation }: HomeProps) {
   // 크루 이름은 화면 폭에 맞춰 22~32px(디자인 clamp(22px, 6.4vw, 32px))
   const titleSize = Math.round(Math.min(32, Math.max(22, useWindowDimensions().width * 0.064)));
   const crew = crews.data?.crews.find((c) => c.id === crewId);
-  if (!crew || !crews.data) return <Loading />;
+  if (!crews.data) return <Loading />;
+  // '크루 없이 하기'로 들어왔거나 크루에서 나온 사람도 홈은 보여야 한다
+  if (!crew) return <NoCrewHome navigation={navigation} name={me.data?.name ?? ''} friend={friend.data ?? null} />;
   const c = ch.data;
   const all = crews.data;
   return (
@@ -211,6 +213,52 @@ export function Home({ navigation }: HomeProps) {
 }
 
 /** 진행 중인 친구와 달리기. 별도 탭 없이 홈 맨 위에 보인다 */
+function NoCrewHome({ navigation, name, friend }: { navigation: HomeProps['navigation']; name: string; friend: Challenge | null }) {
+  return (
+    <TabPage
+      gap={18}
+      header={
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <T size={32} weight="700" ls={-0.025} style={{ flex: 1 }}>
+            홈
+          </T>
+          <Tap onPress={() => navigation.navigate('MySettings')} label="내 설정">
+            <Avatar letter={name.slice(0, 1)} color={C.lime} ink={C.ink} size={44} />
+          </Tap>
+        </View>
+      }
+    >
+      {friend ? (
+        <FriendCard
+          c={friend}
+          onPress={() =>
+            friend.timeUp ? navigation.navigate('FriendRunExpired', { challengeId: friend.id }) : navigation.navigate('Running', { challengeId: friend.id })
+          }
+        />
+      ) : null}
+      <Glass style={{ borderRadius: 20, padding: 18, gap: 12 }}>
+        <T size={19} weight="700">
+          아직 크루가 없어요
+        </T>
+        <Sub size={14}>크루를 만들거나 초대 코드로 참여하면 크루원과 함께 큰 그림을 그릴 수 있어요.</Sub>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Btn title="새 크루 만들기" kind="secondary" flex textSize={15} icon={<IcPlus size={16} w={2.4} />} onPress={() => navigation.navigate('CrewSetup', { mode: 'create' })} />
+          <Btn title="초대 코드로 참여" kind="secondary" flex textSize={15} onPress={() => navigation.navigate('CrewSetup', { mode: 'join' })} />
+        </View>
+      </Glass>
+      <Glass kind="lime" style={{ borderRadius: 20, padding: 18, gap: 10 }}>
+        <T size={17} weight="700">
+          크루 없이 친구와 달리기
+        </T>
+        <Sub size={14} style={{ color: C.limeDeep }}>
+          코드 하나로 친구와 24시간 안에 함께 그림을 그려요.
+        </Sub>
+        <Btn title="친구와 달리기" kind="dark" onPress={() => navigation.navigate('FriendRun')} />
+      </Glass>
+    </TabPage>
+  );
+}
+
 function FriendCard({ c, onPress }: { c: Challenge; onPress: () => void }) {
   const end = new Date(c.endAt);
   const today = new Date();
