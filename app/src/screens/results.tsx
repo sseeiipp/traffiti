@@ -55,6 +55,7 @@ import {
   useWide,
 } from '../ui/kit';
 import { fmtKm, kmParts, md, Measure, pct, ymd } from './common';
+import { CourseMenu } from './courseMenu';
 
 type TabP<K extends keyof Tabs> = CompositeScreenProps<BottomTabScreenProps<Tabs, K>, NativeStackScreenProps<Stack>>;
 
@@ -894,7 +895,7 @@ export function Artwork({ navigation, route }: P<'Artwork'>) {
         <T size={14} weight="600">
           {done ? '작품이 완성됐어요' : c.status === 'active' ? '그리는 중인 작품' : '미완료로 보관한 작품'}
         </T>
-        <View style={{ width: 44 }} />
+        <CourseMenu c={c} onDeleted={() => navigation.goBack()} />
       </View>
       <Glass style={{ borderRadius: 20, padding: 18, gap: 14 }}>
         <View style={{ height: 230, borderRadius: 14, overflow: 'hidden' }}>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, type AuthUser } from '../auth/auth.guard.js';
 import { ChallengesService, type RouteInput } from './challenges.service.js';
@@ -39,6 +39,11 @@ export class ChallengesController {
   @Post('challenges/:id/cancel')
   cancel(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.ch.cancel(u.id, id);
+  }
+
+  @Delete('challenges/:id')
+  remove(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.ch.remove(u.id, id);
   }
 
   @Patch('challenges/:id/category')

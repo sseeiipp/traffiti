@@ -196,7 +196,7 @@ export class CrewsService {
               (SELECT count(*)::int FROM crew_members x WHERE x.crew_id = c.id AND x.left_at IS NULL) AS members,
               ch.id AS challenge_id, ch.title AS challenge_title, ch.progress, ch.end_at
        FROM crew_members m JOIN crews c ON c.id = m.crew_id
-       LEFT JOIN challenges ch ON ch.crew_id = c.id AND ch.status = 'active'
+       LEFT JOIN challenges ch ON ch.crew_id = c.id AND ch.status = 'active' AND ch.end_at > now()
        WHERE m.user_id = $1 AND m.left_at IS NULL AND c.deleted_at IS NULL
        ORDER BY m.joined_at`,
       [userId],
@@ -294,7 +294,7 @@ export class CrewsService {
       };
     }
     const active = await this.db.one(
-      `SELECT id, title, shape_key, progress, end_at FROM challenges WHERE crew_id = $1 AND status = 'active'`,
+      `SELECT id, title, shape_key, progress, end_at FROM challenges WHERE crew_id = $1 AND status = 'active' AND end_at > now()`,
       [crewId],
     );
     const pending = myRole === 'leader'

@@ -106,6 +106,10 @@ export interface Challenge {
   status: 'active' | 'completed' | 'cancelled' | 'expired';
   creatorId: number;
   creatorName: string;
+  /** 만든 사람이나 크루장: 코스 삭제 */
+  canDelete: boolean;
+  /** 직접 그린 코스를 만든 사람이나 크루장: 이름 바꾸기 */
+  canRename: boolean;
   startAt: string;
   endAt: string;
   /** 친구 챌린지: 내일 24시까지 연장을 이미 썼는지 */

@@ -10,7 +10,7 @@ import { START_SPOTS } from '../store/draft';
 import { newClientId, useRun } from '../store/run';
 import { densify, distanceOf, finishRun, simulationPath, SIMULATE, uploadPending } from '../run/engine';
 import { C } from '../theme';
-import { IcChevron, IcLocate, IcMore, IcPlay, IcPause } from '../ui/icons';
+import { IcChevron, IcLocate, IcPlay, IcPause } from '../ui/icons';
 import {
   Avatar,
   Btn,
@@ -32,6 +32,7 @@ import {
   useTop,
 } from '../ui/kit';
 import { clock, fmtKm, hm, kmParts, md, Measure, pace, partsOf, pct } from './common';
+import { CourseMenu } from './courseMenu';
 
 // ---------- 14 챌린지 상세 · 참여 ----------
 
@@ -49,11 +50,12 @@ export function ChallengeJoin({ navigation, route }: P<'ChallengeJoin'>) {
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <Measure height={360}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={360} pad={44} seed={c.id} />}</Measure>
       <RoundBtn onPress={() => navigation.goBack()} style={{ position: 'absolute', left: 16, top: top + 2 }} />
-      {active && leader ? (
-        <RoundBtn kind="custom" label="챌린지 메뉴" onPress={() => navigation.navigate('ChallengeStop', { challengeId: c.id })} style={{ position: 'absolute', right: 16, top: top + 2 }}>
-          <IcMore />
-        </RoundBtn>
-      ) : null}
+      <CourseMenu
+        c={c}
+        onDeleted={() => navigation.goBack()}
+        extra={active && leader ? { title: '챌린지 중단', onPress: () => navigation.navigate('ChallengeStop', { challengeId: c.id }) } : undefined}
+        style={{ position: 'absolute', right: 16, top: top + 2 }}
+      />
       <Glass kind="sheet" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '88%', borderRadius: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 26, paddingHorizontal: 20, paddingBottom: b, gap: 18 }}>
         <View style={{ gap: 4 }}>
           <H1 size={26}>{c.title}</H1>
@@ -439,6 +441,8 @@ export function RunSaved({ navigation, route }: P<'RunSaved'>) {
   const run = useRunQuery(route.params.runId);
   useEffect(() => {
     qc.invalidateQueries({ queryKey: ['challenge'] });
+    // 친구와 달리기 카드(홈 맨 위)도 완성 여부를 다시 받아 온다
+    qc.invalidateQueries({ queryKey: ['friend'] });
     qc.invalidateQueries({ queryKey: ['runs'] });
     qc.invalidateQueries({ queryKey: ['artworks'] });
     qc.invalidateQueries({ queryKey: ['crews'] });

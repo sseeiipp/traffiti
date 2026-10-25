@@ -165,6 +165,8 @@ export class ChallengesService {
 
   async current(userId: number, crewId: number) {
     await this.crews.assertMember(userId, crewId);
+    // 기간이 끝난 챌린지가 10분 정리 주기 전까지 홈에 '진행 중'으로 남지 않게 먼저 정리한다
+    await this.expire();
     const row = await this.db.one<{ id: number }>(`SELECT id FROM challenges WHERE crew_id = $1 AND status = 'active'`, [crewId]);
     return row ? this.view(userId, row.id) : null;
   }
@@ -251,6 +253,7 @@ export class ChallengesService {
     const remainingKm = Math.round(((segCount - covered) * SEG_M) / 100) / 10;
     const me = members.find((m) => m.id === userId);
     const firstGap = segs.findIndex((s) => !s);
+    const myRole = ch.crew_id ? await this.crews.role(userId, ch.crew_id, db) : null;
     return {
       id: ch.id,
       crewId: ch.crew_id,
@@ -264,6 +267,9 @@ export class ChallengesService {
       status: ch.status,
       creatorId: ch.created_by,
       creatorName: ch.creator_name,
+      // 삭제는 만든 사람이나 크루장, 이름 바꾸기는 여기에 직접 그린 코스일 때만
+      canDelete: ch.created_by === userId || myRole === 'leader',
+      canRename: ch.shape_key === 'custom' && (ch.created_by === userId || myRole === 'leader'),
       startAt: ch.start_at,
       endAt: ch.end_at,
       extended: !!ch.extended_at,
@@ -301,6 +307,19 @@ export class ChallengesService {
     return this.view(userId, id);
   }
 
+  /** 코스(챌린지·작품) 삭제. 만든 사람이나 크루장만. 크루 XP는 그대로 두고 연결만 끊는다. */
+  async remove(userId: number, id: number) {
+    const ch = await this.db.one<{ crew_id: number | null; created_by: number }>(`SELECT crew_id, created_by FROM challenges WHERE id = $1`, [id]);
+    if (!ch) throw new NotFoundException('챌린지를 찾을 수 없어요.');
+    const role = ch.crew_id ? await this.crews.role(userId, ch.crew_id) : null;
+    if (ch.created_by !== userId && role !== 'leader') throw new ForbiddenException('만든 사람이나 크루장만 지울 수 있어요.');
+    await this.db.tx(async (c) => {
+      await c.query(`UPDATE crew_xp_transactions SET challenge_id = NULL WHERE challenge_id = $1`, [id]);
+      await c.query(`DELETE FROM challenges WHERE id = $1`, [id]);
+    });
+    return { ok: true };
+  }
+
   async setCategory(userId: number, id: number, name: string) {
     const n = (name ?? '').trim();
     if (!n || n.length > 12) throw new BadRequestException('그림 이름은 1–12자예요.');
@@ -309,7 +328,8 @@ export class ChallengesService {
     if (!ch) throw new NotFoundException('챌린지를 찾을 수 없어요.');
     const role = ch.crew_id ? await this.crews.role(userId, ch.crew_id) : null;
     if (ch.created_by !== userId && role !== 'leader') throw new ForbiddenException('만든 사람이나 크루장만 이름을 정할 수 있어요.');
-    await this.db.pool.query(`UPDATE challenges SET category = $2 WHERE id = $1`, [id, n]);
+    // 직접 그린 코스는 제목도 새 이름으로 바꾼다
+    await this.db.pool.query(`UPDATE challenges SET category = $2, title = CASE WHEN shape_key = 'custom' THEN $2 ELSE title END WHERE id = $1`, [id, n]);
     return { category: n };
   }
 
