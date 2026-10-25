@@ -1268,6 +1268,11 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
   const unit = useUnit();
   const draft = useDraft();
   const top = useTop();
+  // 다시 그리기: 직접 그린 그림은 그린 화면(스케치북·지도 위)으로, 고른 그림은 그림 고르기로 돌아간다
+  const redraw = () =>
+    draft.customPath
+      ? navigation.navigate(draft.mode === "sketch" ? "Sketchbook" : "DrawMap")
+      : navigation.navigate("CourseSelect");
   const body = {
     shapeKey: draft.shapeKey ?? undefined,
     customPath: draft.customPath ?? undefined,
@@ -1475,7 +1480,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
                   title="다시 그리기"
                   kind="secondary"
                   style={{ width: 112 }}
-                  onPress={() => navigation.goBack()}
+                  onPress={redraw}
                 />
                 <Btn
                   title="이 경로로 확정"
@@ -1502,8 +1507,8 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
                 <Tap
                   key={a}
                   onPress={() =>
-                    a.includes("다시 그리")
-                      ? navigation.goBack()
+                    a.includes("다시 그리") || a.includes("다른 그림")
+                      ? redraw()
                       : i === 2 || a.includes("다른 그림")
                         ? navigation.navigate("CourseSelect")
                         : navigation.navigate("AreaPick")

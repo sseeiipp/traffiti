@@ -57,6 +57,27 @@ export function similarity(shape: LatLng[], route: LatLng[], tol = 40): number {
   return Math.round(((ab + ba) / 2) * 100);
 }
 
+/**
+ * 부분별로 가장 많이 어긋난 곳의 닮은 정도(0~100). 그림과 경로를 각각 순서대로 k조각으로 나눠
+ * 조각마다 상대 선에서 tol 안에 있는 점의 비율을 재고 가장 낮은 값을 돌려준다.
+ * 전체 평균은 높아도 한쪽 귀가 통째로 빠지거나, 경로가 한 곳에서 크게 돌아가면 여기서 낮게 나온다.
+ */
+export function worstPart(shape: LatLng[], route: LatLng[], tol = 40, k = 8): number {
+  const a = resample(shape, 20);
+  const b = resample(route, 20);
+  const near = (p: LatLng, set: LatLng[]) => set.some((q) => haversine(p, q) <= tol);
+  const worst = (pts: LatLng[], other: LatLng[]) => {
+    let w = 1;
+    for (let i = 0; i < k; i++) {
+      const piece = pts.slice(Math.floor((i * pts.length) / k), Math.floor(((i + 1) * pts.length) / k));
+      if (piece.length < 3) continue;
+      w = Math.min(w, piece.filter((p) => near(p, other)).length / piece.length);
+    }
+    return w;
+  };
+  return Math.round(Math.min(worst(a, b), worst(b, a)) * 100);
+}
+
 export interface FittedRoute {
   /** 그림을 옮겨 놓은 선 */
   shape: LatLng[];
@@ -67,6 +88,8 @@ export interface FittedRoute {
   movedM: number;
   /** 그림을 돌린 각도(도, 시계 방향이 +) */
   rotatedDeg?: number;
+  /** 부분별로 가장 많이 어긋난 곳의 닮은 정도(worstPart) */
+  worstPart?: number | null;
 }
 
 // ---- 도로망을 가지고 있을 때: 자리·각도·크기를 고르고 그림 선에 붙은 길로 잇는다 ----
@@ -112,15 +135,18 @@ function fitWithRoads(path: string, start: LatLng, meters: number): FittedRoute 
   if (!cands.length) return null;
   cands.sort((a, b) => b.score - a.score);
   let best: (FittedRoute & { score: number }) | null = null;
-  for (const c of cands.slice(0, 12)) {
+  for (const c of cands.slice(0, 20)) {
     const traced = traceOnRoads(g, c.shape);
     if (!traced) continue;
     // 막다른 길에 붙은 경유점은 수백 m를 들어갔다 나오므로 더 긴 되돌이까지 잘라낸다
     const road = trimEnds(despur(traced, 12, 600), c.shape);
     const sim = similarity(c.shape, road);
+    const worst = worstPart(c.shape, road);
     const ratio = pathLength(road) / pathLength(c.shape);
-    const score = sim - 30 * Math.max(0, ratio - 1.3) - Math.hypot(c.dn, c.de) / 200;
-    if (!best || score > best.score) best = { shape: c.shape, road, similarity: sim, movedM: Math.round(Math.hypot(c.dn, c.de)), rotatedDeg: c.rot, score };
+    // 전체가 닮은 것과 함께, 귀·꼬리처럼 한 부분이 통째로 빠지지 않은 자리를 고른다
+    const score = 0.6 * sim + 0.4 * worst - 30 * Math.max(0, ratio - 1.3) - Math.hypot(c.dn, c.de) / 200;
+    if (!best || score > best.score)
+      best = { shape: c.shape, road, similarity: sim, worstPart: worst, movedM: Math.round(Math.hypot(c.dn, c.de)), rotatedDeg: c.rot, score };
   }
   if (!best) return null;
   const { score: _score, ...r } = best;
@@ -159,10 +185,11 @@ export async function fitToRoads(path: string, start: LatLng, meters: number): P
       break;
     }
     const sim = similarity(shape, road);
+    const worst = worstPart(shape, road);
     const ratio = pathLength(road) / pathLength(shape);
-    const score = sim - 30 * Math.max(0, ratio - 1.3);
-    if (!best || score > best.score) best = { shape, road, similarity: sim, movedM: Math.round(Math.hypot(dn, de)), score };
-    if (sim >= 72 && ratio <= 1.45) break;
+    const score = 0.6 * sim + 0.4 * worst - 30 * Math.max(0, ratio - 1.3);
+    if (!best || score > best.score) best = { shape, road, similarity: sim, worstPart: worst, movedM: Math.round(Math.hypot(dn, de)), score };
+    if (sim >= 75 && worst >= 45 && ratio <= 1.45) break;
   }
   const { score: _score, ...r } = best!;
   cache.set(key, r);
