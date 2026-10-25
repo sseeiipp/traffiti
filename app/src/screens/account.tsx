@@ -152,17 +152,14 @@ export function MySettings({ navigation }: P<'MySettings'>) {
           label="로그아웃"
           color={C.danger}
           center
+          chevron={false}
           onPress={() => {
             qc.clear();
             logout();
           }}
         />
       </Group>
-      <Tap noScale onPress={() => navigation.navigate('AccountDelete')} style={{ alignSelf: 'center', height: 44, paddingHorizontal: 12, justifyContent: 'center' }}>
-        <T size={14} color={C.sub}>
-          계정 삭제
-        </T>
-      </Tap>
+      <Btn title="계정 삭제" kind="dangerSoft" onPress={() => navigation.navigate('AccountDelete')} style={{ marginTop: 12 }} />
     </Screen>
   );
 }
