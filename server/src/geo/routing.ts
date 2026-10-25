@@ -1,4 +1,5 @@
 import { haversine, pathLength, projectShape, resample, type LatLng } from './geometry.js';
+import { insideRoads, roadCoverage, roads, toLL, toXY, traceOnRoads } from './roads.js';
 
 /** OSRM 도보 경로 서버. 기본은 공개 서버(FOSSGIS), 자체 호스팅하면 OSRM_URL로 바꾼다. */
 const OSRM_URL = process.env.OSRM_URL ?? 'https://routing.openstreetmap.de/routed-foot/route/v1/foot';
@@ -64,6 +65,66 @@ export interface FittedRoute {
   similarity: number | null;
   /** 출발 지점을 옮긴 거리(m) */
   movedM: number;
+  /** 그림을 돌린 각도(도, 시계 방향이 +) */
+  rotatedDeg?: number;
+}
+
+// ---- 도로망을 가지고 있을 때: 자리·각도·크기를 고르고 그림 선에 붙은 길로 잇는다 ----
+
+const SHIFTS = [0, -250, 250, -500, 500, -800];
+const ROTATIONS = [0, -10, 10, -20, 20, -30, 30];
+const SCALES = [1, 0.9, 1.1];
+
+function placeShape(path: string, start: LatLng, meters: number, dn: number, de: number, rot: number, scale: number): LatLng[] {
+  const [sx, sy] = toXY(start);
+  const base = projectShape(path, toLL([sx + de, sy + dn]), meters * scale).map(toXY);
+  const [ox, oy] = base[0];
+  const r = (-rot * Math.PI) / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  return base.map(([x, y]) => toLL([ox + (x - ox) * c - (y - oy) * s, oy + (x - ox) * s + (y - oy) * c]));
+}
+
+/** 경로 처음·끝이 그림에서 80m 넘게 벗어난 꼬리(첫 경유점이 엉뚱한 길에 붙은 경우)를 잘라낸다 */
+function trimEnds(road: LatLng[], shape: LatLng[], tol = 80): LatLng[] {
+  const pts = resample(shape, 20);
+  const near = (p: LatLng) => pts.some((q) => haversine(p, q) <= tol);
+  let a = 0, b = road.length - 1;
+  while (a < b && !near(road[a])) a++;
+  while (b > a && !near(road[b])) b--;
+  return b - a >= 2 ? road.slice(a, b + 1) : road;
+}
+
+function fitWithRoads(path: string, start: LatLng, meters: number): FittedRoute | null {
+  const g = roads();
+  if (!g) return null;
+  const cands: { dn: number; de: number; rot: number; scale: number; score: number; shape: LatLng[] }[] = [];
+  for (const dn of SHIFTS)
+    for (const de of SHIFTS)
+      for (const rot of ROTATIONS)
+        for (const scale of SCALES) {
+          const shape = placeShape(path, start, meters, dn, de, rot, scale);
+          const pts = resample(shape, 20).map(toXY);
+          if (!insideRoads(g, pts)) continue;
+          // 길이 있는 곳을 많이 지나는 자리를 고르되, 출발 지점·모양을 많이 바꿀수록 조금씩 깎는다
+          const score = roadCoverage(g, pts) - Math.hypot(dn, de) / 8000 - Math.abs(rot) / 600 - Math.abs(scale - 1) / 4;
+          cands.push({ dn, de, rot, scale, score, shape });
+        }
+  if (!cands.length) return null;
+  cands.sort((a, b) => b.score - a.score);
+  let best: (FittedRoute & { score: number }) | null = null;
+  for (const c of cands.slice(0, 12)) {
+    const traced = traceOnRoads(g, c.shape);
+    if (!traced) continue;
+    // 막다른 길에 붙은 경유점은 수백 m를 들어갔다 나오므로 더 긴 되돌이까지 잘라낸다
+    const road = trimEnds(despur(traced, 12, 600), c.shape);
+    const sim = similarity(c.shape, road);
+    const ratio = pathLength(road) / pathLength(c.shape);
+    const score = sim - 30 * Math.max(0, ratio - 1.3) - Math.hypot(c.dn, c.de) / 200;
+    if (!best || score > best.score) best = { shape: c.shape, road, similarity: sim, movedM: Math.round(Math.hypot(c.dn, c.de)), rotatedDeg: c.rot, score };
+  }
+  if (!best) return null;
+  const { score: _score, ...r } = best;
+  return r;
 }
 
 /** 강·하천을 가로지르면 다리까지 크게 돌아가므로, 출발 지점을 조금씩 옮겨 가며 가장 잘 맞는 자리를 고른다(m, 북·동) */
@@ -80,6 +141,12 @@ export async function fitToRoads(path: string, start: LatLng, meters: number): P
   const key = `${path}|${start.join()}|${Math.round(meters)}`;
   const hit = cache.get(key);
   if (hit) return hit;
+  const local = fitWithRoads(path, start, meters);
+  if (local) {
+    cache.set(key, local);
+    return local;
+  }
+  // 도로망 밖이면 공개 경로 서버(OSRM)에 경유점을 넘긴다
   const cosLat = Math.cos((start[0] * Math.PI) / 180);
   let best: (FittedRoute & { score: number }) | null = null;
   for (const [dn, de] of OFFSETS) {

@@ -76,7 +76,10 @@ export class ChallengesService {
     const notes: string[] = [];
     if (!fit.road) notes.push('지금은 도로 경로를 찾지 못해 그림 선을 그대로 보여줘요.');
     else {
-      if (fit.movedM) notes.push(`하천을 건너지 않도록 그림을 ${fit.movedM}m 옮겼어요.`);
+      const m = fit.movedM, d = Math.abs(fit.rotatedDeg ?? 0);
+      if (m && d) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮기고 ${d}° 돌려 놓았어요.`);
+      else if (m) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮겨 놓았어요.`);
+      else if (d) notes.push(`길에 잘 맞도록 그림을 ${d}° 돌려 놓았어요.`);
       if (fit.similarity! < 70) notes.push('길이 없는 곳은 가까운 도로로 돌아가서 그림과 다른 곳이 있어요.');
     }
     return {
