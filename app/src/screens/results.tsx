@@ -56,6 +56,7 @@ import {
 } from '../ui/kit';
 import { fmtKm, kmParts, md, Measure, pct, ymd } from './common';
 import { CourseMenu } from './courseMenu';
+import { CrewPickSheet } from './home';
 
 type TabP<K extends keyof Tabs> = CompositeScreenProps<BottomTabScreenProps<Tabs, K>, NativeStackScreenProps<Stack>>;
 
@@ -164,6 +165,7 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
   const c = cur.data ?? ch.data ?? null;
   const crew = crews.data?.crews.find((x) => x.id === crewId);
   const detail = useCrew(crewId);
+  const [crewSheet, setCrewSheet] = useState(false);
   if (crews.isLoading || (crew && cur.isLoading)) return <Loading />;
   // '크루 없이 하기'로 들어온 사람: 크루를 만들거나 참여하는 길만 보여준다
   if (!crew)
@@ -192,15 +194,22 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
   const relay = c ? relayText(c) : null;
   const dash = 2 * Math.PI * 40;
   return (
-    // 제목 왼쪽에 홈으로 돌아가는 버튼
+    <>
+    {/* 홈처럼 크루 이름 옆 ▾로 다른 크루로 바꾸거나 새 크루를 만든다 */}
+    <CrewPickSheet open={crewSheet} onClose={() => setCrewSheet(false)} onSetup={(mode) => navigation.navigate('CrewSetup', { mode })} />
     <TabPage
       header={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <RoundBtn label="홈으로" onPress={() => navigation.navigate('Home')} />
+        <Tap
+          noScale
+          onPress={() => setCrewSheet(true)}
+          label={`크루 바꾸기, 지금 ${crew.name}`}
+          style={{ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+        >
           <H1 size={28} style={{ flexShrink: 1 }}>
-            {c ? c.title : crew.name}
+            {crew.name}
           </H1>
-        </View>
+          <IcDown />
+        </Tap>
       }
     >
       {/* 크루원: 탭을 열자마자 누가 함께하는지 먼저 보인다 */}
@@ -357,6 +366,7 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
         <IcChevron size={18} color={C.ink} w={2} />
       </Tap>
     </TabPage>
+    </>
   );
 }
 

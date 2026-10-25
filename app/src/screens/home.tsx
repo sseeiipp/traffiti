@@ -16,6 +16,62 @@ import { fmtKm, md, Measure, partsOf, pct } from './common';
 
 type HomeProps = CompositeScreenProps<BottomTabScreenProps<Tabs, 'Home'>, NativeStackScreenProps<Stack>>;
 
+/** 크루 이름 옆 ▾를 누르면 뜨는 내 크루 시트. 다른 크루로 바꾸거나 새 크루를 만들고 참여한다 */
+export function CrewPickSheet({ open, onClose, onSetup }: { open: boolean; onClose: () => void; onSetup: (mode: 'create' | 'join') => void }) {
+  const crewId = useCurrentCrewId();
+  const crews = useMyCrews();
+  const setAuth = useAuth((s) => s.set);
+  const all = crews.data;
+  if (!all) return null;
+  return (
+    <Sheet open={open} onClose={onClose} radius={32}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
+        <T size={20} weight="700" style={{ flex: 1 }}>
+          내 크루
+        </T>
+        <Tap label="닫기" onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.fill, alignItems: 'center', justifyContent: 'center' }}>
+          <IcClose size={18} />
+        </Tap>
+      </View>
+      <View accessibilityRole="radiogroup" style={{ gap: 2 }}>
+        {all.crews.map((x) => {
+          const on = x.id === crewId;
+          return (
+            <Pressable
+              key={x.id}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              onPress={() => {
+                setAuth({ crewId: x.id });
+                onClose();
+              }}
+              style={{ minHeight: 64, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: on ? 'rgba(163, 230, 53, 0.22)' : 'transparent' }}
+            >
+              <CrewAvatar crew={x} size={44} radius={12} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <T size={16} weight="600" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {x.name}
+                  </T>
+                  {x.id === all.primaryCrewId ? <Pill label="대표" bg={C.ink} color={C.lime} height={20} /> : null}
+                </View>
+                <T size={13} color={C.sub}>
+                  {x.members}명 · {x.activeChallenge ? `${x.activeChallenge.title} 진행 중` : '진행 중인 챌린지 없음'}
+                </T>
+              </View>
+              {on ? <IcCheck size={20} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Btn title="새 크루 만들기" kind="secondary" height={48} textSize={15} flex onPress={() => (onClose(), onSetup('create'))} />
+        <Btn title="초대 코드로 참여" kind="secondary" height={48} textSize={15} flex onPress={() => (onClose(), onSetup('join'))} />
+      </View>
+    </Sheet>
+  );
+}
+
 // ---------- 06 크루 홈 ----------
 
 export function Home({ navigation }: HomeProps) {
@@ -39,51 +95,11 @@ export function Home({ navigation }: HomeProps) {
   return (
     <>
     {/* 크루 이름을 누르면 홈 위에서 바로 크루를 바꾼다(26 내 크루) */}
-    <Sheet open={crewSheet} onClose={() => setCrewSheet(false)} radius={32}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
-        <T size={20} weight="700" style={{ flex: 1 }}>
-          내 크루
-        </T>
-        <Tap label="닫기" onPress={() => setCrewSheet(false)} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.fill, alignItems: 'center', justifyContent: 'center' }}>
-          <IcClose size={18} />
-        </Tap>
-      </View>
-      <View accessibilityRole="radiogroup" style={{ gap: 2 }}>
-        {all.crews.map((x) => {
-          const on = x.id === crew.id;
-          return (
-            <Pressable
-              key={x.id}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              onPress={() => {
-                setAuth({ crewId: x.id });
-                setCrewSheet(false);
-              }}
-              style={{ minHeight: 64, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: on ? 'rgba(163, 230, 53, 0.22)' : 'transparent' }}
-            >
-              <CrewAvatar crew={x} size={44} radius={12} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <T size={16} weight="600" numberOfLines={1} style={{ flexShrink: 1 }}>
-                    {x.name}
-                  </T>
-                  {x.id === all.primaryCrewId ? <Pill label="대표" bg={C.ink} color={C.lime} height={20} /> : null}
-                </View>
-                <T size={13} color={C.sub}>
-                  {x.members}명 · {x.activeChallenge ? `${x.activeChallenge.title} 진행 중` : '진행 중인 챌린지 없음'}
-                </T>
-              </View>
-              {on ? <IcCheck size={20} /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Btn title="새 크루 만들기" kind="secondary" height={48} textSize={15} flex onPress={() => (setCrewSheet(false), navigation.navigate('CrewSetup', { mode: 'create' }))} />
-        <Btn title="초대 코드로 참여" kind="secondary" height={48} textSize={15} flex onPress={() => (setCrewSheet(false), navigation.navigate('CrewSetup', { mode: 'join' }))} />
-      </View>
-    </Sheet>
+    <CrewPickSheet
+      open={crewSheet}
+      onClose={() => setCrewSheet(false)}
+      onSetup={(mode) => navigation.navigate('CrewSetup', { mode })}
+    />
     <TabPage
       gap={18}
       header={
