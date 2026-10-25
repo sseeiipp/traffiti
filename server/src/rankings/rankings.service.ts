@@ -101,7 +101,20 @@ export class RankingsService {
     const category = type === 'xp' ? 'all' : (q.category ?? 'all');
     if (category.length > 20) throw new BadRequestException('카테고리를 확인해 주세요.');
 
-    let snap = await this.latest(type, periodKey, category);
+    // 이번 달과 전체 기간은 달리기가 끝나는 대로 보이도록 매번 바로 계산한다. 지난달은 저장된 스냅샷을 쓴다
+    const live = !monthly || periodKey === monthKey();
+    let snap = live
+      ? {
+          at: new Date().toISOString(),
+          rows: competitionRank(await this.score(type, periodKey, category)).map((r) => ({
+            crew_id: r.crewId,
+            score: r.score,
+            rank: r.rank,
+            tier: type === 'completion_rate' ? tierOf(r.score) : null,
+            detail: r.detail,
+          })),
+        }
+      : await this.latest(type, periodKey, category);
     if (!snap) {
       await this.snapshot(type, periodKey, category);
       snap = await this.latest(type, periodKey, category);

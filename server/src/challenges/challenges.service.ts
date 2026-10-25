@@ -23,9 +23,6 @@ const REDRAW_STRETCH = 1.6;
 export const SUPPORTED = { minLat: 37.525, maxLat: 37.57, minLng: 127.015, maxLng: 127.095 };
 export const DEFAULT_START: LatLng = [37.5446, 127.0559]; // 성수역 3번 출구
 
-const inSupported = ([lat, lng]: LatLng) =>
-  lat >= SUPPORTED.minLat && lat <= SUPPORTED.maxLat && lng >= SUPPORTED.minLng && lng <= SUPPORTED.maxLng;
-
 const PARTS: Record<string, string[]> = {
   whale: ['머리와 눈', '등과 꼬리 위', '꼬리 아래와 배', '턱과 마무리'],
   heart: ['왼쪽 아래', '왼쪽 위', '오른쪽 위', '오른쪽 아래'],
@@ -65,13 +62,6 @@ export class ChallengesService {
     const custom = !!input.customPath;
     const shape = custom ? null : shapeByKey(input.shapeKey ?? '');
     if (!custom && !shape) throw new BadRequestException('그림을 골라 주세요.');
-    if (custom && !inSupported(start)) {
-      return {
-        ok: false as const,
-        reason: '직접 그린 그림은 지원 지역(성동구·광진구 일대) 안에서만 경로로 만들 수 있어요.',
-        alternatives: ['그림을 조금 옮기거나 줄이기', '다른 지역에서 찾기', '비슷한 검증된 코스 보기'],
-      };
-    }
     const km = Math.min(15, Math.max(1, input.km ?? shape?.km ?? 5));
     const fit = await fitToRoads(custom ? input.customPath! : shape!.path, start, km * 1000);
     const route = resample(fit.road ?? fit.shape, SEG_M);

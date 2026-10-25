@@ -729,6 +729,33 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   const spots = START_SPOTS.filter(
     (s) => !q || s.label.includes(q) || s.area.includes(q),
   );
+  // 출발 지점은 기본으로 지금 위치. 위치 권한이 없으면 추천 지점 중에서 고른다
+  const [locating, setLocating] = useState(false);
+  const pickHere = async (ask: boolean) => {
+    setLocating(true);
+    try {
+      const p = ask
+        ? await Location.requestForegroundPermissionsAsync()
+        : await Location.getForegroundPermissionsAsync();
+      if (!p.granted) return;
+      const l = await Location.getCurrentPositionAsync({});
+      const [a] = await Location.reverseGeocodeAsync(l.coords).catch(() => []);
+      const area = a?.district ?? a?.subregion ?? a?.city ?? "내 주변";
+      draft.set({
+        start: [l.coords.latitude, l.coords.longitude],
+        startLabel: "내 위치",
+        areaLabel: `${area} 일대`,
+      });
+    } catch {
+      // 위치를 못 받으면 고른 지점을 그대로 쓴다
+    } finally {
+      setLocating(false);
+    }
+  };
+  useEffect(() => {
+    if (draft.startLabel === START_SPOTS[0].label) pickHere(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // 지도는 화면 전체 배경. 출발 지점은 검색창과 시트 사이 가운데에 오게 맞춘다
   const { width: W, height: H } = useWindowDimensions();
   const [sheetH, setSheetH] = useState(0);
@@ -919,6 +946,11 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8 }}
           >
+            <Chip
+              label={locating ? "위치 찾는 중…" : "내 위치"}
+              on={draft.startLabel === "내 위치"}
+              onPress={() => pickHere(true)}
+            />
             {spots.map((s) => (
               <Chip
                 key={s.label}
