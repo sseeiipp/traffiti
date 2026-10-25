@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { api } from '../api/client';
-import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useMe, useMyCrews } from '../api/hooks';
+import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, type Challenge } from '../api/hooks';
 import { RouteArt } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { useAuth } from '../store/auth';
@@ -24,6 +24,7 @@ export function Home({ navigation }: HomeProps) {
   const me = useMe();
   const ch = useCurrentChallenge(crewId);
   const works = useArtworks('crew', crewId);
+  const friend = useFriendCurrent();
   const setAuth = useAuth((s) => s.set);
   const [crewSheet, setCrewSheet] = useState(false);
   const crew = crews.data?.crews.find((c) => c.id === crewId);
@@ -109,6 +110,16 @@ export function Home({ navigation }: HomeProps) {
         </View>
       }
     >
+      {friend.data ? (
+        <FriendCard
+          c={friend.data}
+          onPress={() =>
+            friend.data!.timeUp
+              ? navigation.navigate('FriendRunExpired', { challengeId: friend.data!.id })
+              : navigation.navigate('Running', { challengeId: friend.data!.id })
+          }
+        />
+      ) : null}
       {c ? (
         <Glass style={{ borderRadius: 20 }}>
           <Measure height={210}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={210} pad={28} seed={crew.id} />}</Measure>
@@ -203,6 +214,40 @@ export function Home({ navigation }: HomeProps) {
       </View>
     </TabPage>
     </>
+  );
+}
+
+/** 진행 중인 친구와 달리기. 별도 탭 없이 홈 맨 위에 보인다 */
+function FriendCard({ c, onPress }: { c: Challenge; onPress: () => void }) {
+  const end = new Date(c.endAt);
+  const today = new Date();
+  // 24시에 끝나므로 끝나는 시각의 1초 전 날짜로 오늘·내일을 가른다
+  const endDay = new Date(end.getTime() - 1000).toDateString();
+  const when = c.timeUp ? '시간이 끝났어요' : endDay === today.toDateString() ? '오늘 24시까지' : '내일 24시까지';
+  return (
+    <Tap onPress={onPress} label="진행 중인 친구와 달리기">
+      <View style={{ borderRadius: 20, backgroundColor: C.limeSoft, boxShadow: '0 6px 18px rgba(101, 163, 13, 0.2)', paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+          <RouteArt route={c.route} segments={c.segments} w={56} h={56} pad={7} stroke={3.5} map={false} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <T size={12} weight="700" color={C.limeText}>
+            친구와 달리기
+          </T>
+          <T size={16} weight="700" numberOfLines={1}>
+            {c.name} · {pct(c.progress)}
+          </T>
+          <T size={13} color={C.body2}>
+            {when}
+          </T>
+        </View>
+        <View style={{ height: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: C.lime, justifyContent: 'center' }}>
+          <T size={14} weight="700">
+            {c.timeUp ? '정하기' : '이어 달리기'}
+          </T>
+        </View>
+      </View>
+    </Tap>
   );
 }
 

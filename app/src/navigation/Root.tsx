@@ -78,6 +78,7 @@ export function Root() {
           <Stack.Screen name="ChallengeShare" component={Cr.ChallengeShare} />
           <Stack.Screen name="FriendRun" component={Cr.FriendRun} />
           <Stack.Screen name="FriendToCrew" component={Cr.FriendToCrew} />
+          <Stack.Screen name="FriendRunExpired" component={Cr.FriendRunExpired} />
           <Stack.Screen name="ChallengeJoin" component={Run.ChallengeJoin} />
           <Stack.Screen name="Running" component={Run.Running} options={{ gestureEnabled: false }} />
           {!recover ? <Stack.Screen name="Recovery" component={Run.Recovery} /> : null}

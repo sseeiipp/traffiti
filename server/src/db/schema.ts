@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS challenges (
 );
 -- 크루당 진행 중 챌린지 1개
 CREATE UNIQUE INDEX IF NOT EXISTS challenges_one_active ON challenges (crew_id) WHERE status = 'active' AND crew_id IS NOT NULL;
+-- 친구 챌린지는 오늘 24시까지. 시간이 끝나면 내일 24시까지 한 번만 연장할 수 있다
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS extended_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS challenges_friend_code ON challenges (friend_code) WHERE friend_code IS NOT NULL AND status = 'active';
 
 CREATE TABLE IF NOT EXISTS challenge_participations (

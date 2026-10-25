@@ -246,6 +246,8 @@ export class ChallengesService {
       creatorName: ch.creator_name,
       startAt: ch.start_at,
       endAt: ch.end_at,
+      extended: !!ch.extended_at,
+      timeUp: ch.status === 'active' && new Date(ch.end_at).getTime() <= Date.now(),
       daysLeft: Math.max(0, Math.ceil((new Date(ch.end_at).getTime() - Date.now()) / 86_400_000)),
       visibility: ch.visibility,
       gpsVisibility: ch.gps_visibility,
@@ -300,20 +302,20 @@ export class ChallengesService {
 
   // ---- 친구 챌린지 ----
 
-  async createFriend(userId: number, b: { shapeKey: string; period: '오늘' | '3일' | '7일'; start?: LatLng }) {
+  /** 친구 챌린지 기간은 오늘 24시(한국 시간)까지로 고정 */
+  async createFriend(userId: number, b: { shapeKey: string; start?: LatLng }) {
     const shape = shapeByKey(b.shapeKey);
     if (!shape) throw new BadRequestException('그림을 골라 주세요.');
     const r = this.suggest({ shapeKey: b.shapeKey, start: b.start });
     if (!r.ok) throw new BadRequestException(r.reason);
-    const days = b.period === '오늘' ? 1 : b.period === '7일' ? 7 : 3;
     return this.db.tx(async (c) => {
       for (let i = 0; i < 20; i++) {
         const code = randomCode();
         const row = await c.query(
           `INSERT INTO challenges (friend_code, created_by, shape_key, title, start_at, end_at, target_distance_m, difficulty, route_points, area_label, start_label)
-           VALUES ($1,$2,$3,$4, now(), now() + ($5 || ' days')::interval, $6, $7, $8, '지금 위치 근처', '지금 위치')
+           VALUES ($1,$2,$3,$4, now(), (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') + interval '1 day') AT TIME ZONE 'Asia/Seoul', $5, $6, $7, '지금 위치 근처', '지금 위치')
            ON CONFLICT DO NOTHING RETURNING id`,
-          [code, userId, shape.key, `${shape.label} 챌린지`, String(days), Math.round(r.distanceKm * 1000), r.difficulty, JSON.stringify(r.route)],
+          [code, userId, shape.key, `${shape.label} 챌린지`, Math.round(r.distanceKm * 1000), r.difficulty, JSON.stringify(r.route)],
         );
         if (row.rowCount) {
           await c.query(`INSERT INTO challenge_participations (challenge_id, user_id, color) VALUES ($1, $2, '#7A5AF8')`, [
@@ -368,6 +370,44 @@ export class ChallengesService {
       ]);
       return { id: ch.id };
     });
+  }
+
+  /** 내가 참여한 진행 중 친구 챌린지(홈 맨 위 카드). 시간이 끝나도 저장·연장을 고를 때까지 남는다. */
+  async currentFriend(userId: number) {
+    const row = await this.db.one<{ id: number }>(
+      `SELECT ch.id FROM challenges ch JOIN challenge_participations p ON p.challenge_id = ch.id AND p.user_id = $1
+       WHERE ch.crew_id IS NULL AND ch.status = 'active' ORDER BY ch.end_at DESC LIMIT 1`,
+      [userId],
+    );
+    return row ? this.view(userId, row.id) : null;
+  }
+
+  private async friendForAction(userId: number, id: number) {
+    const ch = await this.db.one<{ crew_id: number | null; status: string; extended_at: string | null; end_at: string }>(
+      `SELECT crew_id, status, extended_at, end_at FROM challenges WHERE id = $1`,
+      [id],
+    );
+    if (!ch || ch.crew_id) throw new NotFoundException('친구 챌린지를 찾을 수 없어요.');
+    if (!(await this.db.one(`SELECT 1 FROM challenge_participations WHERE challenge_id = $1 AND user_id = $2`, [id, userId])))
+      throw new ForbiddenException('참여한 사람만 할 수 있어요.');
+    if (ch.status !== 'active') throw new ConflictException('이미 끝난 챌린지예요.');
+    return ch;
+  }
+
+  /** 시간이 끝난 친구 챌린지를 내일 24시까지 한 번만 연장 */
+  async extendFriend(userId: number, id: number) {
+    const ch = await this.friendForAction(userId, id);
+    if (ch.extended_at) throw new ConflictException('연장은 한 번만 할 수 있어요.');
+    if (new Date(ch.end_at).getTime() > Date.now()) throw new ConflictException('아직 시간이 남아 있어요.');
+    await this.db.pool.query(`UPDATE challenges SET end_at = end_at + interval '1 day', extended_at = now() WHERE id = $1`, [id]);
+    return this.view(userId, id);
+  }
+
+  /** 달린 만큼 저장: 미완료 작품으로 보관 */
+  async finishFriend(userId: number, id: number) {
+    await this.friendForAction(userId, id);
+    await this.db.pool.query(`UPDATE challenges SET status = 'expired', end_at = LEAST(end_at, now()) WHERE id = $1`, [id]);
+    return this.view(userId, id);
   }
 
   /** 친구 챌린지 → 크루. 만든 사람이 크루장이 되고, 다른 참여자에게는 초대가 간다. 작품과 XP는 새 크루로 옮긴다. */
@@ -461,11 +501,15 @@ export class ChallengesService {
     return out;
   }
 
-  /** 챌린지 기간이 끝나면 완성 기준을 못 넘긴 것은 미완료로 보관한다. */
+  /**
+   * 챌린지 기간이 끝나면 완성 기준을 못 넘긴 것은 미완료로 보관한다.
+   * 친구 챌린지는 연장 전이면 하루 더 기다린다(그동안 34 화면에서 저장·연장을 고른다).
+   */
   @Cron('0 */10 * * * *')
   async expire() {
     await this.db.pool.query(
-      `UPDATE challenges SET status = 'expired' WHERE status = 'active' AND end_at < now()`,
+      `UPDATE challenges SET status = 'expired' WHERE status = 'active' AND end_at < now()
+         AND (crew_id IS NOT NULL OR extended_at IS NOT NULL OR end_at < now() - interval '1 day')`,
     );
   }
 }

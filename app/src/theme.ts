@@ -13,6 +13,7 @@ export const C = {
   limeEdge: '#84CC16',
   limeText: '#3F6212',
   limeDeep: '#2E3A12',
+  limeSoft: '#ECFCCB',
   toggle: '#65A30D',
   fill: 'rgba(120, 120, 128, 0.12)',
   field: '#F2F2F7',

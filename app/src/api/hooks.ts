@@ -105,6 +105,10 @@ export interface Challenge {
   creatorName: string;
   startAt: string;
   endAt: string;
+  /** 친구 챌린지: 내일 24시까지 연장을 이미 썼는지 */
+  extended: boolean;
+  /** 진행 중인데 기간이 끝남(친구 챌린지는 저장·연장을 고를 때까지 이 상태) */
+  timeUp: boolean;
   daysLeft: number;
   visibility: string;
   gpsVisibility: string;
@@ -213,6 +217,12 @@ export const useCurrentChallenge = (crewId: number | null) =>
 
 export const useChallenge = (id: number | null | undefined) =>
   useQuery({ queryKey: ['challenge', id], queryFn: () => api<Challenge>(`/challenges/${id}`), enabled: !!id });
+
+/** 내가 참여한 진행 중 친구 챌린지(홈 맨 위 카드) */
+export const useFriendCurrent = () => {
+  const token = useAuth((s) => s.accessToken);
+  return useQuery({ queryKey: ['friend', 'current', token], queryFn: () => api<Challenge | null>('/friend-challenges/current'), enabled: !!token });
+};
 
 export const useArtworks = (scope: 'all' | 'crew' | 'mine', crewId?: number | null) =>
   useQuery({

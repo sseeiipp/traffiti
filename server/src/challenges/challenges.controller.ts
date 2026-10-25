@@ -56,6 +56,11 @@ export class ChallengesController {
     return this.ch.createFriend(u.id, b);
   }
 
+  @Get('friend-challenges/current')
+  currentFriend(@CurrentUser() u: AuthUser) {
+    return this.ch.currentFriend(u.id);
+  }
+
   @Get('friend-challenges/:code')
   previewFriend(@Param('code') code: string) {
     return this.ch.previewFriend(code);
@@ -65,6 +70,18 @@ export class ChallengesController {
   @Post('friend-challenges/:code/join')
   joinFriend(@CurrentUser() u: AuthUser, @Param('code') code: string) {
     return this.ch.joinFriend(u.id, code);
+  }
+
+  @HttpCode(200)
+  @Post('challenges/:id/extend')
+  extendFriend(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.ch.extendFriend(u.id, id);
+  }
+
+  @HttpCode(200)
+  @Post('challenges/:id/finish')
+  finishFriend(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.ch.finishFriend(u.id, id);
   }
 
   @Post('challenges/:id/to-crew')

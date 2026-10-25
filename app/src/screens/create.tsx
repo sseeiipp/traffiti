@@ -40,7 +40,7 @@ import {
   useBottom,
   useTop,
 } from '../ui/kit';
-import { md, Measure } from './common';
+import { md, Measure, pct } from './common';
 
 type Pt = [number, number];
 
@@ -699,10 +699,10 @@ export function ChallengeShare({ navigation }: P<'ChallengeShare'>) {
 const FRIEND_LINK = (code: string) => `https://example.com/f/${code}`; // 실제 앱 링크는 아직 미정(기획서)
 
 export function FriendRun({ navigation }: P<'FriendRun'>) {
+  const qc = useQueryClient();
   const [mode, setMode] = useState<'make' | 'join'>('make');
   const [step, setStep] = useState(1);
   const [shape, setShape] = useState('heart');
-  const [period, setPeriod] = useState<'오늘' | '3일' | '7일'>('3일');
   const [sheet, setSheet] = useState(false);
   const [here, setHere] = useState<LatLng | null>(null);
   const [made, setMade] = useState<{ id: number; code: string } | null>(null);
@@ -726,18 +726,20 @@ export function FriendRun({ navigation }: P<'FriendRun'>) {
   });
   const join = useQuery({ queryKey: ['friend', code], queryFn: () => api(`/friend-challenges/${code}`), enabled: code.length === 6, retry: false });
   const make = useAction(async () => {
-    const r = await api<{ id: number; code: string }>('/friend-challenges', { body: { shapeKey: shape, period, start: here } });
+    const r = await api<{ id: number; code: string }>('/friend-challenges', { body: { shapeKey: shape, start: here } });
     setMade(r);
     setStep(3);
+    qc.invalidateQueries({ queryKey: ['friend', 'current'] });
   });
   const doJoin = useAction(async () => {
     const r = await api<{ id: number }>(`/friend-challenges/${code}/join`, { body: {} });
+    qc.invalidateQueries({ queryKey: ['friend', 'current'] });
     navigation.replace('Running', { challengeId: r.id });
   });
 
   const quick = ['heart', 'star', 'whale'];
   if (!quick.includes(shape)) quick[2] = shape;
-  const summary = `${shapeLabel(shape)} · ${period} · 약 ${preview.data?.distanceKm ?? cur?.km ?? '–'}km`;
+  const summary = `${shapeLabel(shape)} · 오늘 24시까지 · 약 ${preview.data?.distanceKm ?? cur?.km ?? '–'}km`;
   const T1: Record<number, [string, string]> = {
     1: ['친구와 달리기', '크루 없이도 코드 하나로 함께 그림을 그려요.'],
     2: ['이 길로 달릴까요?', `${shapeLabel(shape)} 모양으로 달릴 수 있는 길을 찾았어요.`],
@@ -791,15 +793,13 @@ export function FriendRun({ navigation }: P<'FriendRun'>) {
                 <TextLink title="더 고르기" onPress={() => setSheet(true)} style={{ minHeight: 36, paddingHorizontal: 12 }} />
               </View>
             </View>
-            <View style={{ gap: 8 }}>
-              <T size={13} weight="600">
-                기간
+            <View style={{ gap: 4, borderRadius: 14, backgroundColor: C.limeSoft, paddingVertical: 12, paddingHorizontal: 14 }}>
+              <T size={14} weight="700" color={C.limeText}>
+                오늘 안에 함께 완성해요
               </T>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {(['오늘', '3일', '7일'] as const).map((p) => (
-                  <Chip key={p} label={p} on={p === period} onPress={() => setPeriod(p)} style={{ flex: 1 }} />
-                ))}
-              </View>
+              <T size={13} color={C.body2} lh={1.45}>
+                오늘 24시에 끝나요. 못 끝내면 저장하거나 내일로 한 번 연장할 수 있어요.
+              </T>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, backgroundColor: C.soft, paddingVertical: 10, paddingHorizontal: 14 }}>
               <ShapeGlyph shape={shape} w={40} h={32} />
@@ -980,3 +980,84 @@ export function FriendToCrew({ navigation, route }: P<'FriendToCrew'>) {
     </Screen>
   );
 }
+
+// ---------- 34 친구와 달리기 · 시간 종료 ----------
+
+export function FriendRunExpired({ navigation, route }: P<'FriendRunExpired'>) {
+  const qc = useQueryClient();
+  const id = route.params.challengeId;
+  const ch = useChallenge(id);
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['challenge', id] });
+    qc.invalidateQueries({ queryKey: ['friend', 'current'] });
+  };
+  const extend = useAction(async () => {
+    await api(`/challenges/${id}/extend`, { body: {} });
+    refresh();
+  });
+  const finish = useAction(async () => {
+    await api(`/challenges/${id}/finish`, { body: {} });
+    refresh();
+    qc.invalidateQueries({ queryKey: ['artworks'] });
+    navigation.reset({ index: 0, routes: [{ name: 'Tabs', params: { screen: 'Gallery' } as never }] });
+  });
+  if (!ch.data) return <Loading />;
+  const c = ch.data;
+  // 연장해서 아직 시간이 남음 / 시간 끝남(연장 가능) / 연장까지 끝남
+  const extendedNow = c.extended && !c.timeUp;
+  const canExtend = !c.extended && c.timeUp;
+  const title = extendedNow ? '내일까지 이어서 달려요' : '오늘 시간이 끝났어요';
+  const lead = extendedNow
+    ? `내일 24시까지 ${c.name}${batchim(c.name) ? '을' : '를'} 완성해 보세요.`
+    : canExtend
+      ? `아직 ${c.name}${batchim(c.name) ? '을' : '를'} 다 못 그렸어요. 어떻게 할까요?`
+      : '연장한 시간도 끝났어요. 달린 만큼 작품으로 남겨요.';
+  return (
+    <Screen
+      gap={18}
+      footer={
+        extendedNow ? (
+          <Btn title="이어 달리기" onPress={() => navigation.replace('Running', { challengeId: id })} />
+        ) : (
+          <>
+            {canExtend ? <Btn title="내일 24시까지 연장하기" loading={extend.isPending} onPress={() => extend.mutate(undefined)} /> : null}
+            <Btn title="달린 만큼 저장하기" kind={canExtend ? 'secondary' : 'primary'} loading={finish.isPending} onPress={() => finish.mutate(undefined)} />
+          </>
+        )
+      }
+    >
+      <NavBar onBack={() => navigation.navigate('Tabs')} />
+      <View style={{ gap: 6 }}>
+        <H1 size={28}>{title}</H1>
+        <Sub>{lead}</Sub>
+      </View>
+      <Glass style={{ borderRadius: 20, padding: 10 }}>
+        <View style={{ height: 190, borderRadius: 14, overflow: 'hidden', backgroundColor: C.map.land }}>
+          <Measure height={190}>{(w) => <RouteArt route={c.route} segments={c.segments} w={w} h={190} pad={20} stroke={4} map={false} />}</Measure>
+        </View>
+        <View style={{ paddingTop: 10, paddingHorizontal: 6, paddingBottom: 4, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <T size={13} color={C.sub}>
+            함께 그린 정도
+          </T>
+          <T size={22} weight="700" rounded>
+            {pct(c.progress)}
+          </T>
+        </View>
+      </Glass>
+      {c.extended ? (
+        <View style={{ borderRadius: 14, backgroundColor: C.limeSoft, paddingVertical: 12, paddingHorizontal: 14 }}>
+          <T size={13} color={C.body2} lh={1.45}>
+            내일 24시까지 한 번만 연장할 수 있어요. 연장은 이미 한 번 썼어요.
+          </T>
+        </View>
+      ) : null}
+      <ErrorText error={extend.error ?? finish.error} />
+    </Screen>
+  );
+}
+
+/** 받침이 있으면 true(을/를 고르기) */
+const batchim = (w: string) => {
+  const ch = w.charCodeAt(w.length - 1);
+  return ch >= 0xac00 && ch <= 0xd7a3 && (ch - 0xac00) % 28 !== 0;
+};

@@ -25,6 +25,7 @@ export type Stack = {
   ChallengeShare: undefined;
   FriendRun: undefined;
   FriendToCrew: { challengeId: number };
+  FriendRunExpired: { challengeId: number };
   ChallengeJoin: { challengeId: number };
   Running: { challengeId: number | null };
   Recovery: undefined;
