@@ -4,8 +4,10 @@ import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
+  Platform,
   ScrollView,
   StyleSheet,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -19,7 +21,7 @@ import {
   useMe,
   useUnit,
 } from "../api/hooks";
-import { KAKAO_JS_KEY, KakaoDrawMap, KakaoRouteMap, type MapView } from "../map/KakaoMap";
+import { KakaoDrawMap, type DrawMapControl, type MapView } from "../map/KakaoMap";
 import { MapBackdrop, RouteArt, ShapeGlyph, type LatLng } from "../map/MapArt";
 import { myLocation } from "../map/myLocation";
 import { FRIEND_SHAPES, SHAPE_ICONS, shapeLabel } from "../map/shapes";
@@ -27,12 +29,13 @@ import type { P } from "../navigation/types";
 import { useAuth } from "../store/auth";
 import { START_SPOTS, useDraft } from "../store/draft";
 import { C, shadow } from "../theme";
-import { DrawPad, QR, strokesToShape } from "../ui/draw";
+import { DrawPad, drawingProblem, QR, strokesToShape } from "../ui/draw";
 import {
   IcCheck,
   IcChevron,
   IcEraser,
   IcLink,
+  IcLocate,
   IcMove,
   IcPen,
   IcSearch,
@@ -50,7 +53,6 @@ import {
   Handle,
   Loading,
   NavBar,
-  Pill,
   RadioRow,
   RoundBtn,
   Screen,
@@ -92,19 +94,13 @@ function geoToMeters(geo: LatLng[][]): Pt[][] {
 
 export function CreateMethod({ navigation }: P<"CreateMethod">) {
   const draft = useDraft();
-  const card = (selected?: boolean) => ({
+  const card = () => ({
     minHeight: 132,
     borderRadius: 20,
     padding: 16,
     flexDirection: "row" as const,
     gap: 14,
     alignItems: "center" as const,
-    ...(selected
-      ? {
-          backgroundColor: "rgba(236, 252, 203, 0.9)",
-          boxShadow: shadow.selected,
-        }
-      : {}),
   });
   return (
     <Screen gap={18}>
@@ -121,10 +117,9 @@ export function CreateMethod({ navigation }: P<"CreateMethod">) {
           navigation.navigate("CourseSelect");
         }}
       >
-        <Glass style={card(true)}>
+        <Glass style={card()}>
           <ShapeGlyph shape="whale" w={96} h={96} sw={12} bg={C.map.land} />
           <View style={{ flex: 1, gap: 6 }}>
-            <Pill label="바로 달릴 수 있어요" />
             <T size={17} weight="700">
               그림 라이브러리
             </T>
@@ -164,7 +159,6 @@ export function CreateMethod({ navigation }: P<"CreateMethod">) {
             />
           </Svg>
           <View style={{ flex: 1, gap: 6 }}>
-            <Pill label="지원 지역에서만" bg={C.seg} />
             <T size={17} weight="700">
               지도 위에 직접 그리기
             </T>
@@ -204,7 +198,6 @@ export function CreateMethod({ navigation }: P<"CreateMethod">) {
             </Svg>
           </View>
           <View style={{ flex: 1, gap: 6 }}>
-            <Pill label="그린 뒤 지역 선택" bg={C.seg} />
             <T size={17} weight="700">
               스케치북에 그리기
             </T>
@@ -484,6 +477,9 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   const km = Math.round(geoLength(geo) * 10) / 10;
   // 서버에는 미터 단위 평면 좌표로 보낸다(지도 확대 정도와 상관없이 같은 모양)
   const path = strokesToShape(geoToMeters(geo));
+  const problem = path ? drawingProblem(strokes) : null;
+  // 그리는 중에도 두 손가락으로 지도를 옮기고 벌려서 확대한다
+  const map = useRef<DrawMapControl | null>(null);
   return (
     <View
       style={{ flex: 1, backgroundColor: C.map.land }}
@@ -501,6 +497,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           center={center}
           interactive={tool === "move"}
           me={here}
+          control={map}
           onView={setView}
           fallback={
             <Svg width={size.w} height={size.h}>
@@ -526,6 +523,8 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           onChange={setStrokes}
           mode={tool === "pen" ? "draw" : tool === "eraser" ? "erase" : "off"}
           color={C.target}
+          onPan={(dx, dy) => map.current?.panBy(dx, dy)}
+          onZoom={(d) => map.current?.zoomBy(d)}
         />
       </View>
       <View
@@ -624,11 +623,20 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
             </T>
           </T>
         </View>
+        {problem ? (
+          <T size={13} color={C.danger} lh={1.4}>
+            {problem}
+          </T>
+        ) : null}
         <Btn
           title={
-            path ? "이 그림으로 경로 찾기" : "지도 위에 그림을 그려 주세요"
+            problem
+              ? "그림을 다시 그려 주세요"
+              : path
+                ? "이 그림으로 경로 찾기"
+                : "지도 위에 그림을 그려 주세요"
           }
-          disabled={!path}
+          disabled={!path || !!problem}
           onPress={() => {
             // 그림을 시작한 곳을 출발 지점으로
             draft.set({ customPath: path, km: Math.max(1, Math.min(15, km)), start: geo[0][0], startLabel: "그림 시작점" });
@@ -647,14 +655,15 @@ export function Sketchbook({ navigation }: P<"Sketchbook">) {
   const [strokes, setStrokes] = useState<Pt[][]>([]);
   const [tool, setTool] = useState<"pen" | "eraser" | "move">("pen");
   const path = strokesToShape(strokes);
+  const problem = path ? drawingProblem(strokes) : null;
   return (
     <Screen
       gap={14}
       scroll={false}
       footer={
         <Btn
-          title="다음: 달릴 곳 정하기"
-          disabled={!path}
+          title={problem ? "그림을 다시 그려 주세요" : "달릴 곳 정하기"}
+          disabled={!path || !!problem}
           onPress={() => {
             draft.set({ customPath: path, km: 5.2 });
             navigation.navigate("AreaPick");
@@ -710,6 +719,11 @@ export function Sketchbook({ navigation }: P<"Sketchbook">) {
           />
         </View>
       </Glass>
+      {problem ? (
+        <T size={13} color={C.danger} lh={1.4}>
+          {problem}
+        </T>
+      ) : null}
     </Screen>
   );
 }
@@ -788,130 +802,188 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   const draft = useDraft();
   const top = useTop();
   const b = useBottom();
-  const [q, setQ] = useState("");
-  const spots = START_SPOTS.filter(
-    (s) => !q || s.label.includes(q) || s.area.includes(q),
-  );
-  // 지도는 화면 전체 배경. 출발 지점은 검색창과 시트 사이 가운데에 오게 맞춘다
   const { width: W, height: H } = useWindowDimensions();
   const [sheetH, setSheetH] = useState(0);
+  const [q, setQ] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  // 지도는 손가락으로 옮기고 확대한다. 그림 틀은 화면에 고정되고, 틀 아래 지도가 달릴 곳이 된다
+  const [center, setCenter] = useState<LatLng>(draft.start);
+  const [view, setView] = useState<MapView | null>(null);
+  const [here, setHere] = useState<LatLng | null>(null);
   const barH = top + 56;
-  const frame = Math.max(120, Math.min(236, H - sheetH - barH - 40));
+  const mapH = Math.max(320, H - sheetH + 30);
+  const frame = Math.round(
+    Math.max(140, Math.min(W * 0.61, H - sheetH - barH - 56)),
+  );
+  const fx = (W - frame) / 2;
+  const fy = barH + (H - sheetH - barH - frame) / 2 + 12;
+  const inner = draft.customPath ? frame - 8 : frame - 24;
+  const pin = startPoint(draft.customPath, draft.shapeKey, frame, inner);
+  // 출발 핀이 가리키는 화면 위치 → 지도 좌표
+  const pinGeo = (v: MapView | null): LatLng | null => {
+    if (!v || !pin) return null;
+    const x = fx + pin.x;
+    const y = fy + pin.y;
+    return [
+      v.nw[0] + (y / mapH) * (v.se[0] - v.nw[0]),
+      v.nw[1] + (x / W) * (v.se[1] - v.nw[1]),
+    ];
+  };
+  // 지도를 옮겨 출발 핀이 at에 오게 한다
+  const putPinAt = (at: LatLng) => {
+    const p = pinGeo(view);
+    if (!view || !p) return setCenter(at);
+    const mid: LatLng = [(view.nw[0] + view.se[0]) / 2, (view.nw[1] + view.se[1]) / 2];
+    setCenter([mid[0] + at[0] - p[0], mid[1] + at[1] - p[1]]);
+  };
+  // 처음 들어오면 위치 권한을 묻고 지금 위치에서 출발하게 맞춘다
+  const aligned = useRef<"none" | "draft" | "here">("none");
+  useEffect(() => {
+    myLocation(true).then((pos) => pos && setHere(pos));
+  }, []);
+  useEffect(() => {
+    if (!view) return;
+    if (here && aligned.current !== "here") {
+      aligned.current = "here";
+      putPinAt(here);
+    } else if (aligned.current === "none") {
+      aligned.current = "draft";
+      putPinAt(draft.start);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [here, view]);
+  // 지도가 멈추면 핀 아래 좌표를 출발 지점으로, 이름은 주소로 바꾼다
+  // 카카오맵을 못 불러온 경우에는 고른 지점을 그대로 쓴다
+  const start = pinGeo(view) ?? draft.start;
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      draft.set({ start });
+      const [a] = await Location.reverseGeocodeAsync({
+        latitude: start[0],
+        longitude: start[1],
+      }).catch(() => []);
+      const spot =
+        [a?.street, a?.streetNumber].filter(Boolean).join(" ") ||
+        a?.name ||
+        a?.district ||
+        "지도에서 고른 곳";
+      const area = a?.district ?? a?.subregion ?? a?.city;
+      draft.set({
+        startLabel: spot,
+        ...(area ? { areaLabel: `${area} 일대` } : {}),
+      });
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start[0].toFixed(5), start[1].toFixed(5)]);
+  const search = async () => {
+    const k = q.trim();
+    if (!k) return;
+    setSearching(true);
+    setNotFound(false);
+    try {
+      const spot = START_SPOTS.find(
+        (s) => s.label.includes(k) || s.area.includes(k),
+      );
+      const [g] = spot
+        ? [{ latitude: spot.pos[0], longitude: spot.pos[1] }]
+        : await Location.geocodeAsync(k).catch(() => []);
+      if (g) putPinAt([g.latitude, g.longitude]);
+      else setNotFound(true);
+    } finally {
+      setSearching(false);
+    }
+  };
   const backdrop = (
     <Svg
       width={W}
-      height={H}
-      viewBox="0 0 390 844"
+      height={mapH}
+      viewBox="0 0 390 600"
       preserveAspectRatio="xMidYMid slice"
     >
-      <MapBackdrop w={390} h={844} seed={7} />
+      <MapBackdrop w={390} h={600} seed={7} />
     </Svg>
   );
   return (
     <View style={{ flex: 1, backgroundColor: C.map.land }}>
-      <View style={StyleSheet.absoluteFill}>
-        {KAKAO_JS_KEY ? (
-          <KakaoRouteMap
-            route={[draft.start, draft.start]}
-            w={W}
-            h={H}
-            mode="target"
-            showStart
-            insetTop={barH}
-            insetBottom={sheetH}
-            fallback={backdrop}
-          />
-        ) : (
-          backdrop
-        )}
+      <View style={{ position: "absolute", left: 0, top: 0, width: W, height: mapH }}>
+        <KakaoDrawMap
+          w={W}
+          h={mapH}
+          center={center}
+          interactive
+          me={here}
+          onView={setView}
+          fallback={backdrop}
+        />
       </View>
+      {/* 그림 틀: 디자인처럼 흰 35% 바탕 + 점선, 모서리 핸들, 위쪽 회전 손잡이 */}
       <View
         pointerEvents="none"
         style={{
           position: "absolute",
-          left: 0,
-          right: 0,
-          top: barH,
-          bottom: sheetH,
+          left: fx,
+          top: fy,
+          width: frame,
+          height: frame,
+          borderWidth: 1.5,
+          borderStyle: "dashed",
+          borderColor: C.ink,
+          backgroundColor: "rgba(255, 255, 255, 0.35)",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <View
-          style={{
-            width: frame,
-            height: frame,
-            borderWidth: 1.5,
-            borderStyle: "dashed",
-            borderColor: C.ink,
-            backgroundColor: "rgba(255, 255, 255, 0.25)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {draft.customPath ? (
-            <ShapeFromPath d={draft.customPath} size={frame - 8} />
-          ) : draft.shapeKey ? (
-            <ShapeGlyph
-              shape={draft.shapeKey}
-              w={frame - 24}
-              h={frame - 24}
-              color={C.target}
-            />
-          ) : null}
-          {/* 크기 조절 핸들 4개와 회전 손잡이 */}
-          {[
-            { left: -7, top: -7 },
-            { right: -7, top: -7 },
-            { left: -7, bottom: -7 },
-            { right: -7, bottom: -7 },
-          ].map((pos, i) => (
-            <View
-              key={i}
-              style={{
-                position: "absolute",
-                ...pos,
-                width: 12,
-                height: 12,
-                borderRadius: 2,
-                borderWidth: 2,
-                borderColor: C.ink,
-                backgroundColor: "#FFFFFF",
-              }}
-            />
-          ))}
+        {draft.customPath ? (
+          <ShapeFromPath d={draft.customPath} size={inner} />
+        ) : draft.shapeKey ? (
+          <ShapeGlyph shape={draft.shapeKey} w={inner} h={inner} color={C.target} />
+        ) : null}
+        {[
+          { left: -7, top: -7 },
+          { right: -7, top: -7 },
+          { left: -7, bottom: -7 },
+          { right: -7, bottom: -7 },
+        ].map((pos, i) => (
           <View
+            key={i}
             style={{
               position: "absolute",
-              top: -24,
-              left: frame / 2 - 1.75,
-              width: 1.5,
-              height: 24,
-              backgroundColor: C.ink,
-            }}
-          />
-          <View
-            style={{
-              position: "absolute",
-              top: -38,
-              left: frame / 2 - 9.75,
-              width: 16,
-              height: 16,
-              borderRadius: 8,
+              ...pos,
+              width: 12,
+              height: 12,
+              borderRadius: 2,
               borderWidth: 2,
               borderColor: C.ink,
               backgroundColor: "#FFFFFF",
             }}
           />
-          <StartPin
-            at={startPoint(
-              draft.customPath,
-              draft.shapeKey,
-              frame,
-              draft.customPath ? frame - 8 : frame - 24,
-            )}
-          />
-        </View>
+        ))}
+        <View
+          style={{
+            position: "absolute",
+            top: -24,
+            left: frame / 2 - 1.75,
+            width: 1.5,
+            height: 24,
+            backgroundColor: C.ink,
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: -40,
+            left: frame / 2 - 9.75,
+            width: 16,
+            height: 16,
+            borderRadius: 8,
+            borderWidth: 2,
+            borderColor: C.ink,
+            backgroundColor: "#FFFFFF",
+          }}
+        />
+        <StartPin at={pin} />
       </View>
       <View
         style={{
@@ -936,19 +1008,60 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
           }}
         >
           <IcSearch size={18} color={C.sub} w={2} />
-          <Field
+          <TextInput
             value={q}
-            onChangeText={setQ}
-            placeholder="지역 또는 장소 검색"
-            height={46}
-            style={{
-              backgroundColor: "transparent",
-              paddingHorizontal: 0,
-              fontSize: 15,
+            onChangeText={(t) => {
+              setQ(t);
+              setNotFound(false);
             }}
+            onSubmitEditing={search}
+            returnKeyType="search"
+            placeholder={searching ? "찾는 중…" : "지역 또는 장소 검색"}
+            placeholderTextColor={C.sub3}
+            style={[
+              { flex: 1, minWidth: 0, height: 46, fontSize: 15, color: C.ink, padding: 0 },
+              Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+            ]}
           />
         </Glass>
       </View>
+      {notFound ? (
+        <Glass
+          style={{
+            position: "absolute",
+            left: 76,
+            right: 16,
+            top: top + 56,
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          }}
+        >
+          <T size={13} color={C.sub}>
+            찾는 곳이 없어요. 지도를 직접 옮겨 주세요.
+          </T>
+        </Glass>
+      ) : null}
+      {/* 지도를 내 위치로 */}
+      {here ? (
+        <Tap
+          label="내 위치로"
+          onPress={() => putPinAt(here)}
+          style={{ position: "absolute", right: 16, bottom: sheetH + 12 }}
+        >
+          <Glass
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <IcLocate />
+          </Glass>
+        </Tap>
+      ) : null}
       <View
         style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
         onLayout={(e) => setSheetH(Math.round(e.nativeEvent.layout.height))}
@@ -959,6 +1072,7 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
             borderRadius: 0,
             borderTopLeftRadius: 26,
             borderTopRightRadius: 26,
+            backgroundColor: "rgba(255, 255, 255, 0.78)",
             paddingTop: 20,
             paddingHorizontal: 20,
             paddingBottom: b,
@@ -977,26 +1091,6 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
               3 / 4
             </T>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {spots.map((s) => (
-              <Chip
-                key={s.label}
-                label={s.label}
-                on={draft.startLabel === s.label}
-                onPress={() =>
-                  draft.set({
-                    start: s.pos,
-                    startLabel: s.label,
-                    areaLabel: s.area,
-                  })
-                }
-              />
-            ))}
-          </ScrollView>
           <Glass
             style={{
               minHeight: 52,
@@ -1005,12 +1099,13 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
+              gap: 12,
             }}
           >
             <T size={14} color={C.sub}>
               출발 지점
             </T>
-            <T size={14} weight="600">
+            <T size={14} weight="600" numberOfLines={1} style={{ flexShrink: 1 }}>
               {draft.startLabel}
             </T>
           </Glass>
@@ -1037,7 +1132,10 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
           </View>
           <Btn
             title="이 위치에서 경로 찾기"
-            onPress={() => navigation.navigate("RouteReview")}
+            onPress={() => {
+              draft.set({ start });
+              navigation.navigate("RouteReview");
+            }}
           />
         </Glass>
       </View>
@@ -1206,6 +1304,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
             insetBottom={sheetH}
             mode="route"
             showStart
+            interactive
             seed={2}
           />
         ) : (

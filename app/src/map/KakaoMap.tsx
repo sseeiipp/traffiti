@@ -44,10 +44,12 @@ function update(d){
   }
 }
 window.update=update;
+window.setInteractive=function(on){if(map){map.setDraggable(on);map.setZoomable(on)}};
+window.addEventListener('resize',function(){if(map)map.relayout()});
 if(typeof kakao==='undefined'){post('fail')}else{
   kakao.maps.load(function(){
     map=new kakao.maps.Map(document.getElementById('m'),{center:new kakao.maps.LatLng(37.5446,127.0559),level:4,draggable:false,scrollwheel:false,disableDoubleClickZoom:true});
-    post('ready');if(pending)update(pending);
+    map.setZoomable(false);post('ready');if(pending)update(pending);
   });
 }
 </script></body></html>`;
@@ -91,10 +93,15 @@ export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: Re
     if (Platform.OS === 'web') (frame.current?.contentWindow as any)?.update?.(data);
     else web.current?.injectJavaScript(`window.update(${json});true;`);
   }, [data, state]);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    if (Platform.OS === 'web') (frame.current?.contentWindow as any)?.setInteractive?.(!!p.interactive);
+    else web.current?.injectJavaScript(`window.setInteractive(${!!p.interactive});true;`);
+  }, [p.interactive, state]);
 
   if (state === 'fail') return <>{fallback}</>;
   return (
-    <View style={{ width: p.w, height: p.h, backgroundColor: C.map.land }} pointerEvents="none">
+    <View style={{ width: p.w, height: p.h, backgroundColor: C.map.land }} pointerEvents={p.interactive ? 'auto' : 'none'}>
       {Platform.OS === 'web' ? (
         createElement('iframe', {
           ref: frame,
@@ -117,6 +124,8 @@ export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: Re
   );
 }
 
+export type DrawMapControl = { panBy: (dx: number, dy: number) => void; zoomBy: (d: number) => void };
+
 /** 지도 화면의 왼쪽 위·오른쪽 아래 좌표. 좁은 범위라 그 사이는 선형으로 바꿔도 충분히 맞는다 */
 export type MapView = { nw: LatLng; se: LatLng };
 
@@ -133,6 +142,9 @@ function view(){var p=map.getProjection(),el=document.getElementById('m');
   post('view:'+JSON.stringify({nw:[a.getLat(),a.getLng()],se:[b.getLat(),b.getLng()]}))}
 window.setInteractive=function(on){if(map){map.setDraggable(on);map.setZoomable(on)}};
 window.recenter=function(lat,lng){if(map)map.setCenter(new kakao.maps.LatLng(lat,lng))};
+window.panBy=function(dx,dy){if(map)map.panBy(dx,dy)};
+window.zoomBy=function(d){if(map)map.setLevel(Math.max(1,Math.min(10,map.getLevel()+d)))};
+window.addEventListener('resize',function(){if(map){map.relayout();view()}});
 var meDot=null;
 window.me=function(lat,lng){if(!map)return;var at=new kakao.maps.LatLng(lat,lng);
   if(!meDot){var c=document.createElement('div');c.style.cssText='width:18px;height:18px;border-radius:50%;background:#2F80ED;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 0 8px rgba(47,128,237,.18);';
@@ -161,6 +173,7 @@ export function KakaoDrawMap({
   me,
   onView,
   fallback,
+  control,
 }: {
   w: number;
   h: number;
@@ -168,6 +181,8 @@ export function KakaoDrawMap({
   interactive: boolean;
   /** 내 위치 점 */
   me?: LatLng | null;
+  /** 그리기 판에서 두 손가락으로 지도를 옮기고 확대할 때 쓴다 */
+  control?: { current: DrawMapControl | null };
   onView: (v: MapView) => void;
   fallback: ReactNode;
 }) {
@@ -185,6 +200,11 @@ export function KakaoDrawMap({
     if (Platform.OS === 'web') (frame.current?.contentWindow as any)?.eval?.(js);
     else web.current?.injectJavaScript(`${js};true;`);
   };
+  if (control)
+    control.current =
+      state === 'ready'
+        ? { panBy: (dx, dy) => run(`window.panBy(${dx},${dy})`), zoomBy: (d) => run(`window.zoomBy(${d})`) }
+        : null;
   useEffect(() => {
     if (state === 'ready') run(`window.setInteractive(${interactive})`);
   }, [interactive, state]);
