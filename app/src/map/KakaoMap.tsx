@@ -116,3 +116,101 @@ export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: Re
     </View>
   );
 }
+
+/** 지도 화면의 왼쪽 위·오른쪽 아래 좌표. 좁은 범위라 그 사이는 선형으로 바꿔도 충분히 맞는다 */
+export type MapView = { nw: LatLng; se: LatLng };
+
+const drawHtml = (key: string, center: LatLng) => `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<style>html,body,#m{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:${C.map.land}}</style>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false"></script>
+</head><body><div id="m"></div><script>
+var map=null;
+function post(m){try{window.ReactNativeWebView?window.ReactNativeWebView.postMessage(m):parent.postMessage(m,'*')}catch(e){}}
+function view(){var p=map.getProjection(),el=document.getElementById('m');
+  var a=p.coordsFromContainerPoint(new kakao.maps.Point(0,0)),b=p.coordsFromContainerPoint(new kakao.maps.Point(el.clientWidth,el.clientHeight));
+  post('view:'+JSON.stringify({nw:[a.getLat(),a.getLng()],se:[b.getLat(),b.getLng()]}))}
+window.setInteractive=function(on){if(map){map.setDraggable(on);map.setZoomable(on)}};
+window.recenter=function(lat,lng){if(map)map.setCenter(new kakao.maps.LatLng(lat,lng))};
+if(typeof kakao==='undefined'){post('fail')}else{
+  kakao.maps.load(function(){
+    map=new kakao.maps.Map(document.getElementById('m'),{center:new kakao.maps.LatLng(${center[0]},${center[1]}),level:5,draggable:false,scrollwheel:false,disableDoubleClickZoom:true});
+    map.setZoomable(false);
+    kakao.maps.event.addListener(map,'bounds_changed',view);
+    kakao.maps.event.addListener(map,'tilesloaded',view);
+    post('ready');view();
+  });
+}
+</script></body></html>`;
+
+/**
+ * 직접 그리기용 지도. interactive면 손가락으로 지도를 옮기고 확대·축소할 수 있다.
+ * 지도가 움직일 때마다 onView로 화면 모서리 좌표를 알려 주어, 그린 선이 지도에 붙어 다니게 한다.
+ */
+export function KakaoDrawMap({
+  w,
+  h,
+  center,
+  interactive,
+  onView,
+  fallback,
+}: {
+  w: number;
+  h: number;
+  center: LatLng;
+  interactive: boolean;
+  onView: (v: MapView) => void;
+  fallback: ReactNode;
+}) {
+  const [state, setState] = useState<'loading' | 'ready' | 'fail'>(KAKAO_JS_KEY ? 'loading' : 'fail');
+  // 처음 연 위치로만 페이지를 만들고, 이후 중심 이동은 recenter로 한다
+  const page = useMemo(() => drawHtml(KAKAO_JS_KEY, center), []);
+  const web = useRef<WebViewHandle>(null);
+  const frame = useRef<HTMLIFrameElement | null>(null);
+  const onMsg = (m: string) => {
+    if (m === 'ready') setState('ready');
+    else if (m === 'fail') setState('fail');
+    else if (m.startsWith('view:')) onView(JSON.parse(m.slice(5)));
+  };
+  const run = (js: string) => {
+    if (Platform.OS === 'web') (frame.current?.contentWindow as any)?.eval?.(js);
+    else web.current?.injectJavaScript(`${js};true;`);
+  };
+  useEffect(() => {
+    if (state === 'ready') run(`window.setInteractive(${interactive})`);
+  }, [interactive, state]);
+  useEffect(() => {
+    if (state === 'ready') run(`window.recenter(${center[0]},${center[1]})`);
+  }, [center[0], center[1], state]);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const h = (e: MessageEvent) => typeof e.data === 'string' && e.source === frame.current?.contentWindow && onMsg(e.data);
+    window.addEventListener('message', h);
+    return () => window.removeEventListener('message', h);
+  });
+
+  if (state === 'fail') return <>{fallback}</>;
+  return (
+    <View style={{ width: w, height: h, backgroundColor: C.map.land }} pointerEvents={interactive ? 'auto' : 'none'}>
+      {Platform.OS === 'web' ? (
+        createElement('iframe', {
+          ref: frame,
+          srcDoc: page,
+          style: { border: 0, width: '100%', height: '100%' },
+          onLoad: () => !(frame.current?.contentWindow as any)?.kakao && setState('fail'),
+        })
+      ) : (
+        <WebView
+          ref={web}
+          source={{ html: page, baseUrl: BASE_URL }}
+          originWhitelist={['*']}
+          scrollEnabled={false}
+          style={{ flex: 1, backgroundColor: C.map.land }}
+          onMessage={(e: WebViewMessageEvent) => onMsg(e.nativeEvent.data)}
+          onError={() => setState('fail')}
+        />
+      )}
+    </View>
+  );
+}

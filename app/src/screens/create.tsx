@@ -18,14 +18,14 @@ import {
   useCurrentCrewId,
   useMe,
 } from "../api/hooks";
-import { KAKAO_JS_KEY, KakaoRouteMap } from "../map/KakaoMap";
+import { KAKAO_JS_KEY, KakaoDrawMap, KakaoRouteMap, type MapView } from "../map/KakaoMap";
 import { MapBackdrop, RouteArt, ShapeGlyph, type LatLng } from "../map/MapArt";
 import { FRIEND_SHAPES, SHAPE_ICONS, shapeLabel } from "../map/shapes";
 import type { P } from "../navigation/types";
 import { useAuth } from "../store/auth";
 import { START_SPOTS, useDraft } from "../store/draft";
 import { C, shadow } from "../theme";
-import { DrawPad, QR, strokesLength, strokesToShape } from "../ui/draw";
+import { DrawPad, QR, strokesToShape } from "../ui/draw";
 import {
   IcCheck,
   IcChevron,
@@ -65,6 +65,26 @@ import {
 import { md, Measure, pct } from "./common";
 
 type Pt = [number, number];
+
+/** 지도 좌표 선들의 실제 길이(km) */
+function geoLength(geo: LatLng[][]) {
+  let m = 0;
+  for (const st of geo)
+    for (let i = 1; i < st.length; i++) {
+      const [a, b] = [st[i - 1], st[i]];
+      const k = Math.cos((((a[0] + b[0]) / 2) * Math.PI) / 180);
+      m += Math.hypot((b[0] - a[0]) * 110570, (b[1] - a[1]) * 111320 * k);
+    }
+  return m / 1000;
+}
+
+/** 첫 점 기준 미터 평면(오른쪽이 동쪽, 아래가 남쪽) */
+function geoToMeters(geo: LatLng[][]): Pt[][] {
+  const o = geo[0]?.[0];
+  if (!o) return [];
+  const k = 111320 * Math.cos((o[0] * Math.PI) / 180);
+  return geo.map((st) => st.map((p): Pt => [(p[1] - o[1]) * k, (o[0] - p[0]) * 110570]));
+}
 
 // ---------- 07 챌린지 만들기 방식 선택 ----------
 
@@ -430,13 +450,34 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   const draft = useDraft();
   const top = useTop();
   const b = useBottom();
-  const [strokes, setStrokes] = useState<Pt[][]>([]);
+  // 그린 선은 지도 좌표로 저장해, 지도를 옮기거나 확대해도 그 자리에 붙어 있게 한다
+  const [geo, setGeo] = useState<LatLng[][]>([]);
   const [tool, setTool] = useState<"pen" | "eraser" | "move">("pen");
   const [size, setSize] = useState({ w: 390, h: 700 });
-  // 지원 지역 상자(화면 안 비율) 안의 선 길이를 실제 거리로 환산: 상자 폭 ≈ 2.2km
+  const [center, setCenter] = useState<LatLng>(draft.start);
+  const [view, setView] = useState<MapView | null>(null);
+  // 지금 위치가 잡히면 지도를 그곳으로
+  useEffect(() => {
+    Location.getForegroundPermissionsAsync()
+      .then((p) => (p.granted ? Location.getLastKnownPositionAsync() : null))
+      .then((pos) => pos && setCenter([pos.coords.latitude, pos.coords.longitude]))
+      .catch(() => {});
+  }, []);
   const box = { x: 22, y: 130, w: size.w - 44, h: 390 };
-  const km = Math.round((strokesLength(strokes) / box.w) * 2.2 * 10) / 10;
-  const path = strokesToShape(strokes);
+  // 카카오맵이 없을 때(키 없음·불러오기 실패): 화면 폭 ≈ 2.6km인 고정 지도
+  const v: MapView = view ?? (() => {
+    const kmW = 2.6;
+    const dLng = kmW / (111.32 * Math.cos((center[0] * Math.PI) / 180));
+    const dLat = (kmW * (size.h / size.w)) / 110.57;
+    return { nw: [center[0] + dLat / 2, center[1] - dLng / 2], se: [center[0] - dLat / 2, center[1] + dLng / 2] };
+  })();
+  const toScreen = (p: LatLng): Pt => [((p[1] - v.nw[1]) / (v.se[1] - v.nw[1])) * size.w, ((p[0] - v.nw[0]) / (v.se[0] - v.nw[0])) * size.h];
+  const toGeo = (p: Pt): LatLng => [v.nw[0] + (p[1] / size.h) * (v.se[0] - v.nw[0]), v.nw[1] + (p[0] / size.w) * (v.se[1] - v.nw[1])];
+  const strokes = geo.map((st) => st.map(toScreen));
+  const setStrokes = (s: Pt[][]) => setGeo(s.map((st) => st.map(toGeo)));
+  const km = Math.round(geoLength(geo) * 10) / 10;
+  // 서버에는 미터 단위 평면 좌표로 보낸다(지도 확대 정도와 상관없이 같은 모양)
+  const path = strokesToShape(geoToMeters(geo));
   return (
     <View
       style={{ flex: 1, backgroundColor: C.map.land }}
@@ -447,8 +488,21 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
         })
       }
     >
-      <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill}>
-        <MapBackdrop w={size.w} h={size.h} seed={5} />
+      <View style={StyleSheet.absoluteFill}>
+        <KakaoDrawMap
+          w={size.w}
+          h={size.h}
+          center={center}
+          interactive={tool === "move"}
+          onView={setView}
+          fallback={
+            <Svg width={size.w} height={size.h}>
+              <MapBackdrop w={size.w} h={size.h} seed={5} />
+            </Svg>
+          }
+        />
+      </View>
+      <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Path
           d={`M${box.x + 20} ${box.y} h${box.w - 40} a20 20 0 0 1 20 20 v${box.h - 40} a20 20 0 0 1 -20 20 h-${box.w - 40} a20 20 0 0 1 -20 -20 v-${box.h - 40} a20 20 0 0 1 20 -20 z`}
           fill="none"
@@ -457,7 +511,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           strokeDasharray="6 6"
         />
       </Svg>
-      <View style={[StyleSheet.absoluteFill]}>
+      <View style={StyleSheet.absoluteFill} pointerEvents={tool === "move" ? "none" : "auto"}>
         <DrawPad
           w={size.w}
           h={size.h}
@@ -534,8 +588,8 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
         <Tools
           tool={tool}
           setTool={setTool}
-          onUndo={() => setStrokes(strokes.slice(0, -1))}
-          onClear={() => setStrokes([])}
+          onUndo={() => setGeo(geo.slice(0, -1))}
+          onClear={() => setGeo([])}
           withMove
         />
       </View>
@@ -569,7 +623,8 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           }
           disabled={!path}
           onPress={() => {
-            draft.set({ customPath: path, km: Math.max(1, Math.min(15, km)) });
+            // 그림을 시작한 곳을 출발 지점으로
+            draft.set({ customPath: path, km: Math.max(1, Math.min(15, km)), start: geo[0][0], startLabel: "그림 시작점" });
             navigation.navigate("RouteReview");
           }}
         />
@@ -729,33 +784,6 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   const spots = START_SPOTS.filter(
     (s) => !q || s.label.includes(q) || s.area.includes(q),
   );
-  // 출발 지점은 기본으로 지금 위치. 위치 권한이 없으면 추천 지점 중에서 고른다
-  const [locating, setLocating] = useState(false);
-  const pickHere = async (ask: boolean) => {
-    setLocating(true);
-    try {
-      const p = ask
-        ? await Location.requestForegroundPermissionsAsync()
-        : await Location.getForegroundPermissionsAsync();
-      if (!p.granted) return;
-      const l = await Location.getCurrentPositionAsync({});
-      const [a] = await Location.reverseGeocodeAsync(l.coords).catch(() => []);
-      const area = a?.district ?? a?.subregion ?? a?.city ?? "내 주변";
-      draft.set({
-        start: [l.coords.latitude, l.coords.longitude],
-        startLabel: "내 위치",
-        areaLabel: `${area} 일대`,
-      });
-    } catch {
-      // 위치를 못 받으면 고른 지점을 그대로 쓴다
-    } finally {
-      setLocating(false);
-    }
-  };
-  useEffect(() => {
-    if (draft.startLabel === START_SPOTS[0].label) pickHere(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   // 지도는 화면 전체 배경. 출발 지점은 검색창과 시트 사이 가운데에 오게 맞춘다
   const { width: W, height: H } = useWindowDimensions();
   const [sheetH, setSheetH] = useState(0);
@@ -946,11 +974,6 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 8 }}
           >
-            <Chip
-              label={locating ? "위치 찾는 중…" : "내 위치"}
-              on={draft.startLabel === "내 위치"}
-              onPress={() => pickHere(true)}
-            />
             {spots.map((s) => (
               <Chip
                 key={s.label}
