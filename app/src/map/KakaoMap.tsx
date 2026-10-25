@@ -141,7 +141,7 @@ function post(m){try{window.ReactNativeWebView?window.ReactNativeWebView.postMes
 function view(){var p=map.getProjection(),el=document.getElementById('m');
   var a=p.coordsFromContainerPoint(new kakao.maps.Point(0,0)),b=p.coordsFromContainerPoint(new kakao.maps.Point(el.clientWidth,el.clientHeight));
   post('view:'+JSON.stringify({nw:[a.getLat(),a.getLng()],se:[b.getLat(),b.getLng()]}))}
-window.setInteractive=function(on){if(map){map.setDraggable(on);map.setZoomable(on)}};
+window.setInteractive=function(on,zoom){if(map){map.setDraggable(on);map.setZoomable(on&&zoom!==false)}};
 window.recenter=function(lat,lng){if(map)map.setCenter(new kakao.maps.LatLng(lat,lng))};
 window.panBy=function(dx,dy){if(map)map.panBy(dx,dy)};
 window.zoomBy=function(d){if(map)map.setLevel(Math.max(1,Math.min(10,map.getLevel()+d)))};
@@ -171,6 +171,7 @@ export function KakaoDrawMap({
   h,
   center,
   interactive,
+  zoomable = true,
   me,
   onView,
   fallback,
@@ -180,6 +181,8 @@ export function KakaoDrawMap({
   h: number;
   center: LatLng;
   interactive: boolean;
+  /** false면 옮기기만 되고 확대·축소는 막는다(직접 그리기: 그린 크기가 곧 실제 거리라서) */
+  zoomable?: boolean;
   /** 내 위치 점 */
   me?: LatLng | null;
   /** 그리기 판에서 두 손가락으로 지도를 옮기고 확대할 때 쓴다 */
@@ -207,8 +210,8 @@ export function KakaoDrawMap({
         ? { panBy: (dx, dy) => run(`window.panBy(${dx},${dy})`), zoomBy: (d) => run(`window.zoomBy(${d})`) }
         : null;
   useEffect(() => {
-    if (state === 'ready') run(`window.setInteractive(${interactive})`);
-  }, [interactive, state]);
+    if (state === 'ready') run(`window.setInteractive(${interactive},${zoomable})`);
+  }, [interactive, zoomable, state]);
   useEffect(() => {
     if (state === 'ready') run(`window.recenter(${center[0]},${center[1]})`);
   }, [center[0], center[1], state]);

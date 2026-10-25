@@ -481,7 +481,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   // 서버에는 미터 단위 평면 좌표로 보낸다(지도 확대 정도와 상관없이 같은 모양)
   const path = strokesToShape(geoToMeters(geo));
   const problem = path ? drawingProblem(strokes) : null;
-  // 그리는 중에도 두 손가락으로 지도를 옮기고 벌려서 확대한다
+  // 그리는 중에도 두 손가락으로 지도를 옮긴다. 확대·축소는 막는다
   const map = useRef<DrawMapControl | null>(null);
   return (
     <View
@@ -499,6 +499,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           h={size.h}
           center={center}
           interactive={tool === "move"}
+          zoomable={false}
           me={here}
           control={map}
           onView={setView}
@@ -527,7 +528,6 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           mode={tool === "pen" ? "draw" : tool === "eraser" ? "erase" : "off"}
           color={C.target}
           onPan={(dx, dy) => map.current?.panBy(dx, dy)}
-          onZoom={(d) => map.current?.zoomBy(d)}
         />
       </View>
       <View
