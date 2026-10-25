@@ -1,18 +1,69 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { monthKey, useMe, useRun, useRunsMonth, useUnit } from '../api/hooks';
+import { api } from '../api/client';
+import { monthKey, useAction, useMe, useRun, useRunsMonth, useUnit } from '../api/hooks';
 import { RouteArt, ShapeGlyph, type LatLng } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { C } from '../theme';
-import { IcBack, IcChevron, IcLock } from '../ui/icons';
-import { Glass, Loading, RoundBtn, Screen, T, TabPage, Tap } from '../ui/kit';
+import { IcBack, IcChevron, IcLock, IcTrash } from '../ui/icons';
+import { Btn, ErrorText, Glass, Loading, RoundBtn, Screen, Sheet, T, TabPage, Tap } from '../ui/kit';
 import { clock, fmtKm, hm, kmParts, Measure, mdw, pace, pct } from './common';
 
 type CalProps = CompositeScreenProps<BottomTabScreenProps<Tabs, 'Calendar'>, NativeStackScreenProps<Stack>>;
+
+// ---------- 러닝 기록 삭제 ----------
+
+/** 러닝 기록을 지울지 묻는 시트. 진행 중인 챌린지에 반영된 러닝이면 채운 구간도 함께 빠진다고 알려 준다 */
+function RunDeleteSheet({
+  run,
+  onClose,
+  onDeleted,
+}: {
+  run: { id: number; title: string; isChallenge: boolean } | null;
+  onClose: () => void;
+  onDeleted?: () => void;
+}) {
+  const qc = useQueryClient();
+  const del = useAction(async (id: number) => {
+    await api(`/runs/${id}`, { method: 'DELETE' });
+    await Promise.all(['runs', 'challenge', 'crews', 'crew', 'artworks', 'rankings'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+  });
+  return (
+    <Sheet open={!!run} onClose={onClose}>
+      {run ? (
+        <View style={{ gap: 14 }}>
+          <T size={20} weight="700">
+            이 러닝 기록을 지울까요?
+          </T>
+          <T size={14} color={C.body2} lh={1.5}>
+            {run.title} 기록과 GPS 경로가 모두 지워지고 되돌릴 수 없어요.
+            {run.isChallenge ? ' 진행 중인 챌린지라면 이 러닝으로 채운 구간과 거리 경험치도 함께 빠져요. 이미 완성한 작품의 그림은 그대로 남아요.' : ''}
+          </T>
+          <Btn
+            title="기록 지우기"
+            kind="danger"
+            loading={del.isPending}
+            onPress={() =>
+              del.mutate(run.id, {
+                onSuccess: () => {
+                  onClose();
+                  onDeleted?.();
+                },
+              })
+            }
+          />
+          <Btn title="취소" kind="secondary" onPress={onClose} />
+          <ErrorText error={del.error} />
+        </View>
+      ) : null}
+    </Sheet>
+  );
+}
 
 // ---------- 24 달력 · 날짜별 러닝 ----------
 
@@ -21,6 +72,7 @@ export function Calendar({ navigation }: CalProps) {
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [sel, setSel] = useState(today.getDate());
+  const [toDelete, setToDelete] = useState<{ id: number; title: string; isChallenge: boolean } | null>(null);
   const runs = useRunsMonth(monthKey(cursor));
   const y = cursor.getFullYear();
   const m = cursor.getMonth();
@@ -139,6 +191,14 @@ export function Calendar({ navigation }: CalProps) {
                 <T size={16} weight="600" rounded>
                   {fmtKm(r.distanceKm, unit, 2)}
                 </T>
+                <Tap
+                  noScale
+                  label="이 러닝 기록 지우기"
+                  onPress={() => setToDelete({ id: r.id, title: r.title, isChallenge: r.isChallenge })}
+                  style={{ width: 36, height: 44, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <IcTrash size={18} color={C.sub2} />
+                </Tap>
               </Glass>
             </Tap>
           ))
@@ -150,6 +210,7 @@ export function Calendar({ navigation }: CalProps) {
           </Glass>
         )}
       </View>
+      <RunDeleteSheet run={toDelete} onClose={() => setToDelete(null)} />
     </TabPage>
   );
 }
@@ -160,6 +221,8 @@ export function RunDetail({ navigation, route }: P<'RunDetail'>) {
   const unit = useUnit();
   const run = useRun(route.params.runId);
   const me = useMe();
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
   if (!run.data) return <Loading />;
   const r = run.data;
   const trail = r.points as LatLng[];
@@ -178,6 +241,9 @@ export function RunDetail({ navigation, route }: P<'RunDetail'>) {
             {r.endedAt ? ` – ${hm(r.endedAt).replace(/오전 |오후 /, '')}` : ''}
           </T>
         </View>
+        <RoundBtn kind="custom" label="이 러닝 기록 지우기" onPress={() => setConfirm(true)} style={{ marginLeft: 'auto' }}>
+          <IcTrash size={20} />
+        </RoundBtn>
       </View>
       <View style={{ height: 250, borderRadius: 20, overflow: 'hidden' }}>
         <Measure height={250}>
@@ -228,7 +294,7 @@ export function RunDetail({ navigation, route }: P<'RunDetail'>) {
       {c ? (
         <Tap onPress={() => navigation.navigate('ChallengeJoin', { challengeId: c.id })}>
           <Glass kind="lime" style={{ minHeight: 68, borderRadius: 18, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <ShapeGlyph shape={c.shapeKey} w={40} h={26} sw={16} />
+            <ShapeGlyph shape={c.shapeKey} path={c.customPath} route={r.route} w={40} h={26} sw={16} />
             <View style={{ flex: 1, gap: 2 }}>
               <T size={15} weight="600">
                 {c.title}
@@ -246,6 +312,14 @@ export function RunDetail({ navigation, route }: P<'RunDetail'>) {
           개인 러닝이라 크루 작품과 랭킹에는 들어가지 않았어요.
         </T>
       )}
+      <RunDeleteSheet
+        run={confirm ? { id: r.id, title: c ? c.title : '개인 러닝', isChallenge: !!c } : null}
+        onClose={() => setConfirm(false)}
+        onDeleted={() => {
+          navigation.goBack();
+          qc.removeQueries({ queryKey: ['run', r.id] });
+        }}
+      />
     </Screen>
   );
 }

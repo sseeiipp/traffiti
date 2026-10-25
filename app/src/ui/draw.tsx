@@ -92,7 +92,11 @@ export function DrawPad({
           live.current = [p];
           setTick((t) => t + 1);
         },
+        // 그리는 동안에는 바깥 스크롤·화면 밀기가 손가락을 가져가지 못하게 한다
+        onStartShouldSetPanResponderCapture: () => ref.current.m !== 'off',
+        onMoveShouldSetPanResponderCapture: () => ref.current.m !== 'off',
         onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
         onPanResponderMove: (e) => {
           const ts = e.nativeEvent.touches;
           if (ts.length >= 2 && (ref.current.onPan || ref.current.onZoom)) {
@@ -137,7 +141,8 @@ export function DrawPad({
   );
   const all = live.current.length ? [...strokes, live.current] : strokes;
   return (
-    <View style={{ width: w, height: h }} {...pan.panHandlers}>
+    // 웹: 브라우저가 손가락 끌기를 스크롤·뒤로 가기로 쓰지 않게 막는다
+    <View style={{ width: w, height: h, touchAction: 'none', userSelect: 'none' } as any} {...pan.panHandlers}>
       <Svg width={w} height={h} pointerEvents="none">
         {all.map((s, i) => (
           <Path key={i} d={toPath(s)} stroke={color} strokeWidth={width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -154,7 +159,18 @@ export const toPath = (pts: Pt[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].t
 export function strokesToShape(strokes: Pt[][]): string | null {
   const pts = strokes.flat();
   if (pts.length < 6) return null;
-  return toPath(pts) + ' Z';
+  // 끝을 시작점 가까이에서 마쳤을 때만 닫는다. 멀리서 끝내면 시작과 끝이 다른 한 줄 코스(꼭 원처럼 돌아오지 않아도 된다)
+  return isClosed(pts) ? toPath(pts) + ' Z' : toPath(pts);
+}
+
+/** 끝점이 시작점에서 그림 크기의 12%(최소 24px) 안이면 닫힌 그림으로 본다 */
+export function isClosed(pts: Pt[]): boolean {
+  if (pts.length < 3) return false;
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const [a, b] = [pts[0], pts[pts.length - 1]];
+  return Math.hypot(b[0] - a[0], b[1] - a[1]) <= Math.max(24, diag * 0.12);
 }
 
 /** 점을 줄여 모양만 남긴다(Douglas-Peucker) */
@@ -196,12 +212,13 @@ export function drawingProblem(strokes: Pt[][]): string | null {
   }
   if (strokes.length > 4 || gaps > total * 0.35) return '선이 여러 번 끊겨 있어요. 한 붓으로 이어서 다시 그려 주세요.';
   if (total / diag > 9) return '그림이 너무 복잡해요. 선을 줄여 단순하게 다시 그려 주세요.';
-  // 서버처럼 시작점으로 닫아서 선끼리 몇 번 겹치는지 센다
-  const line = simplify([...pts, pts[0]], diag * 0.02);
+  // 서버에 보낼 모양 그대로(닫힌 그림만 시작점으로 닫아서) 선끼리 몇 번 겹치는지 센다
+  const closed = isClosed(pts);
+  const line = simplify(closed ? [...pts, pts[0]] : pts, diag * 0.02);
   let hits = 0;
   for (let i = 0; i < line.length - 1; i++)
     for (let j = i + 2; j < line.length - 1; j++) {
-      if (i === 0 && j === line.length - 2) continue;
+      if (closed && i === 0 && j === line.length - 2) continue;
       if (meets(line[i], line[i + 1], line[j], line[j + 1])) hits++;
     }
   if (hits > 2) return '선이 너무 많이 겹쳐요. 겹치지 않게 다시 그려 주세요.';

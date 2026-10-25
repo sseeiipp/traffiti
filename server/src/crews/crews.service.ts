@@ -10,6 +10,7 @@ import {
 import type pg from 'pg';
 import { DbService, Queryable } from '../db/db.service.js';
 import { photoUrlOf } from '../images/images.controller.js';
+import { SETS as SHAPE_SETS, SHAPES } from '../geo/shapes.js';
 import {
   COLOR_CLASH,
   colorDistance,
@@ -196,7 +197,9 @@ export class CrewsService {
               (SELECT count(*)::int FROM crew_members x WHERE x.crew_id = c.id AND x.left_at IS NULL) AS members,
               ch.id AS challenge_id, ch.title AS challenge_title, ch.progress, ch.end_at
        FROM crew_members m JOIN crews c ON c.id = m.crew_id
-       LEFT JOIN challenges ch ON ch.crew_id = c.id AND ch.status = 'active' AND ch.end_at > now()
+       LEFT JOIN LATERAL (
+         SELECT id, title, progress, end_at FROM challenges x WHERE x.crew_id = c.id AND x.status = 'active' AND x.end_at > now()
+         ORDER BY x.created_at DESC, x.id DESC LIMIT 1) ch ON true
        WHERE m.user_id = $1 AND m.left_at IS NULL AND c.deleted_at IS NULL
        ORDER BY m.joined_at`,
       [userId],
@@ -294,7 +297,8 @@ export class CrewsService {
       };
     }
     const active = await this.db.one(
-      `SELECT id, title, shape_key, progress, end_at FROM challenges WHERE crew_id = $1 AND status = 'active' AND end_at > now()`,
+      `SELECT id, title, shape_key, custom_path, progress, end_at FROM challenges WHERE crew_id = $1 AND status = 'active' AND end_at > now()
+       ORDER BY created_at DESC, id DESC LIMIT 1`,
       [crewId],
     );
     const pending = myRole === 'leader'
@@ -320,7 +324,7 @@ export class CrewsService {
       discoverable: crew.discoverable,
       myNotify: (await this.db.one(`SELECT notify FROM crew_members WHERE crew_id = $1 AND user_id = $2 AND left_at IS NULL`, [crewId, userId]))?.notify ?? true,
       activeChallenge: active
-        ? { id: active.id, title: active.title, shapeKey: active.shape_key, progress: active.progress, endAt: active.end_at }
+        ? { id: active.id, title: active.title, shapeKey: active.shape_key, customPath: active.custom_path ?? null, progress: active.progress, endAt: active.end_at }
         : null,
       members: memberList,
       joinRequests: pending.map((p) => ({ id: p.id, userId: p.user_id, name: p.display_name, createdAt: p.created_at })),
@@ -533,43 +537,51 @@ export class CrewsService {
   /** 그림 도감: 크루 단위. 달성률 80% 이상이면 '모음', 미완료는 '반쯤', 한정 세트는 열리기 전 잠금 */
   async collection(userId: number, crewId: number) {
     await this.assertMember(userId, crewId);
-    const rows = await this.db.many<{ shape_key: string; category: string | null; best: number }>(
-      `SELECT shape_key, category, max(progress) AS best FROM challenges
+    const rows = await this.db.many<{ shape_key: string; category: string | null; best: number; path: string | null }>(
+      `SELECT shape_key, category, max(progress) AS best,
+              (array_agg(custom_path ORDER BY progress DESC) FILTER (WHERE custom_path IS NOT NULL))[1] AS path FROM challenges
        WHERE crew_id = $1 AND status IN ('completed', 'cancelled', 'expired') GROUP BY shape_key, category`,
       [crewId],
     );
     const best = new Map<string, number>();
+    const pathOf = new Map<string, string>();
     for (const r of rows) {
+      if (r.shape_key === 'custom' && r.path && !pathOf.has(r.category ?? 'custom')) pathOf.set(r.category ?? 'custom', r.path);
       const key = r.shape_key === 'custom' ? (r.category ?? 'custom') : r.shape_key;
       best.set(key, Math.max(best.get(key) ?? 0, r.best));
     }
-    const SETS = [
-      { name: '동물', reward: '다 모으면 동물원 배지', items: ['whale', 'cat', 'rabbit', 'dog', 'bird', 'fish'] },
-      { name: '모양', reward: '다 모으면 도형 마스터 배지', items: ['heart', 'star', 'bolt', 'moon'] },
-      { name: '겨울 한정', reward: '12월 1일에 열려요', items: ['snow', 'leaf', 'flower', 'melon'], opensAt: '2026-12-01' },
-    ];
-    const LABEL: Record<string, string> = {
-      whale: '고래', cat: '고양이', rabbit: '토끼', dog: '강아지', bird: '새', fish: '물고기',
-      heart: '하트', star: '별', bolt: '번개', moon: '달', snow: '눈사람', leaf: '낙엽', flower: '꽃', melon: '수박',
-    };
+    const LABEL: Record<string, string> = Object.fromEntries(SHAPES.map((x) => [x.key, x.label]));
     // 직접 그린 그림 이름은 같은 이름의 라이브러리 그림으로 모은다
     for (const [k, v] of [...best]) {
       const hit = Object.entries(LABEL).find(([, l]) => l === k);
       if (hit) best.set(hit[0], Math.max(best.get(hit[0]) ?? 0, v));
     }
+    // 직접 그린 코스 중 라이브러리에 없는 이름은 '나만의 그림'으로 따로 모은다(라이브러리 key는 빼고)
+    const labels = new Set(Object.values(LABEL));
+    const own = [...best].filter(([k]) => !LABEL[k] && !labels.has(k) && k !== 'custom').map(([k, v]) => ({ key: k, best: v }));
     const now = new Date();
-    const sets = SETS.map((s) => {
+    const sets = SHAPE_SETS.map((s) => {
       const locked = s.opensAt ? new Date(s.opensAt) > now : false;
-      const items = s.items.map((k) => {
-        const b = best.get(k);
+      const items = SHAPES.filter((x) => x.category === s.name).map((x) => {
+        const b = best.get(x.key);
         const state = locked ? 'locked' : b == null ? 'none' : b >= 0.8 ? 'got' : 'half';
-        return { key: k, label: locked ? '?' : LABEL[k], state };
+        return { key: x.key, label: locked ? '?' : x.label, state, km: x.km, progress: b ?? 0 };
       });
       return { name: s.name, reward: s.reward, got: items.filter((i) => i.state === 'got').length, total: items.length, items };
     });
+    // 나만의 그림은 모은 만큼만 보여 주고 전체 개수에는 넣지 않는다
+    if (own.length)
+      sets.push({
+        name: '나만의 그림',
+        reward: '직접 그려 완성한 그림',
+        got: own.filter((o) => o.best >= 0.8).length,
+        total: own.length,
+        items: own.map((o) => ({ key: 'custom', label: o.key, state: o.best >= 0.8 ? 'got' : 'half', km: 0, progress: o.best, path: pathOf.get(o.key) ?? null })),
+      });
+    const counted = sets.filter((x) => x.name !== '나만의 그림');
     return {
-      got: sets.reduce((s, x) => s + x.got, 0),
-      total: sets.reduce((s, x) => s + x.total, 0),
+      got: counted.reduce((s, x) => s + x.got, 0),
+      total: counted.reduce((s, x) => s + x.total, 0),
       sets,
     };
   }

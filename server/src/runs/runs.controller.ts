@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, type AuthUser } from '../auth/auth.guard.js';
 import { RunsService } from './runs.service.js';
@@ -34,6 +34,11 @@ export class RunsController {
   @Post(':id/finish')
   finish(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.runs.finish(u.id, id);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() u: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.runs.remove(u.id, id);
   }
 
   @Get(':id')

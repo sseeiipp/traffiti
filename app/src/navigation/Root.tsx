@@ -32,6 +32,9 @@ function MainTabs() {
   );
 }
 
+// 그림을 그리는 화면은 옆으로 끄는 손가락이 '뒤로 가기' 밀기로 잡혀 화면이 움직이지 않게 막는다
+const noSwipe = { gestureEnabled: false, fullScreenGestureEnabled: false } as const;
+
 const sheet = { presentation: 'transparentModal' as const, animation: 'fade' as const };
 
 export function Root() {
@@ -73,8 +76,8 @@ export function Root() {
           <Stack.Screen name="CrewSwitcher" component={H.CrewSwitcher} options={{ presentation: 'modal' }} />
           <Stack.Screen name="CreateMethod" component={Cr.CreateMethod} />
           <Stack.Screen name="CourseSelect" component={Cr.CourseSelect} />
-          <Stack.Screen name="DrawMap" component={Cr.DrawMap} />
-          <Stack.Screen name="Sketchbook" component={Cr.Sketchbook} />
+          <Stack.Screen name="DrawMap" component={Cr.DrawMap} options={noSwipe} />
+          <Stack.Screen name="Sketchbook" component={Cr.Sketchbook} options={noSwipe} />
           <Stack.Screen name="AreaPick" component={Cr.AreaPick} />
           <Stack.Screen name="RouteReview" component={Cr.RouteReview} />
           <Stack.Screen name="ChallengeShare" component={Cr.ChallengeShare} />

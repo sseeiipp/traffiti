@@ -17,6 +17,7 @@ export const toLL = ([x, y]: [number, number]): LatLng => [ORIGIN[0] + y / M_PER
 
 const NODE_CELL = 50; // 가장 가까운 교차점 찾기용 칸(m)
 const ROAD_CELL = 20; // '이 근처에 길이 있나' 표시용 칸(m)
+const AREA_CELL = 500; // 도로망을 받아 둔 지역인지 보는 칸(m)
 const cellKey = (cx: number, cy: number) => (cx + 50_000) * 100_000 + (cy + 50_000);
 
 interface Graph {
@@ -28,6 +29,8 @@ interface Graph {
   len: Float32Array;
   nodeGrid: Map<number, number[]>;
   roadCells: Set<number>;
+  /** 도로망을 받아 둔 지역(500m 칸). 지역이 여러 곳이라 사이의 빈 땅은 범위 밖으로 본다 */
+  areaCells: Set<number>;
   minX: number;
   maxX: number;
   minY: number;
@@ -78,19 +81,27 @@ export function roads(): Graph | null {
       roadCells.add(cellKey(Math.floor(px / ROAD_CELL), Math.floor(py / ROAD_CELL)));
     }
   }
+  const areaCells = new Set<number>();
   for (let i = 0; i < N; i++) {
     if (!used[i]) continue;
+    areaCells.add(cellKey(Math.floor(x[i] / AREA_CELL), Math.floor(y[i] / AREA_CELL)));
     const k = cellKey(Math.floor(x[i] / NODE_CELL), Math.floor(y[i] / NODE_CELL));
     const list = nodeGrid.get(k);
     if (list) list.push(i);
     else nodeGrid.set(k, [i]);
   }
-  return (graph = { x, y, start, nbr, len, nodeGrid, roadCells, minX, maxX, minY, maxY });
+  return (graph = { x, y, start, nbr, len, nodeGrid, roadCells, areaCells, minX, maxX, minY, maxY });
 }
 
-/** 그림이 도로망 범위 안에 다 들어오는지 */
+/** 그림이 도로망 범위 안에 다 들어오는지(받아 둔 지역 어디든, 강·공원처럼 길 없는 칸 하나둘은 괜찮다) */
 export function insideRoads(g: Graph, pts: [number, number][]) {
-  return pts.every(([px, py]) => px > g.minX + 100 && px < g.maxX - 100 && py > g.minY + 100 && py < g.maxY - 100);
+  if (!pts.every(([px, py]) => px > g.minX + 100 && px < g.maxX - 100 && py > g.minY + 100 && py < g.maxY - 100)) return false;
+  const near = (px: number, py: number) => {
+    const cx = Math.floor(px / AREA_CELL), cy = Math.floor(py / AREA_CELL);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (g.areaCells.has(cellKey(cx + i, cy + j))) return true;
+    return false;
+  };
+  return pts.every(([px, py]) => near(px, py));
 }
 
 /** (x, y)에서 maxD 안의 가장 가까운 교차점·길 위 점. 없으면 -1 */
@@ -184,8 +195,9 @@ class Heap {
  * 그림 선을 따라 도로 위 경로를 만든다. 경유점(약 120m 간격)을 가장 가까운 길에 붙이고,
  * 경유점 사이는 '길이 × (1 + (그림 선까지 거리/30m)²)' 비용이 가장 작은 길로 잇는다.
  * 그래서 그림에서 멀리 돌아가는 길보다 그림 선에 붙은 길을 고른다. 못 이으면 null.
+ * avoid가 참인 곳(걸어서 다니면 안 되는 길)을 따라가는 간선은 4배 비싸게 쳐서 웬만하면 피한다.
  */
-export function traceOnRoads(g: Graph, shapeLL: LatLng[]): LatLng[] | null {
+export function traceOnRoads(g: Graph, shapeLL: LatLng[], avoid?: (x: number, y: number) => boolean): LatLng[] | null {
   const shape = resample(shapeLL, 10).map(toXY);
   const dist = distanceField(shape);
   const wps: number[] = [];
@@ -221,7 +233,9 @@ export function traceOnRoads(g: Graph, shapeLL: LatLng[]): LatLng[] | null {
         const w = g.nbr[e];
         // 긴 길은 가운데만 보면 끝이 그림에서 멀어도 싸 보여서 양 끝과 가운데를 평균 낸다
         const d = (dist(g.x[u], g.y[u]) + dist((g.x[u] + g.x[w]) / 2, (g.y[u] + g.y[w]) / 2) + dist(g.x[w], g.y[w])) / 3;
-        const c = cu + g.len[e] * (1 + (d / 20) ** 2);
+        // 건너기만 하는 간선은 그대로 두고, 양 끝과 가운데가 모두 못 가는 길 위인 간선(그 길을 따라 걷는 것)만 비싸게
+        const bad = avoid && avoid(g.x[u], g.y[u]) && avoid(g.x[w], g.y[w]) && avoid((g.x[u] + g.x[w]) / 2, (g.y[u] + g.y[w]) / 2);
+        const c = cu + g.len[e] * (1 + (d / 20) ** 2) * (bad ? 4 : 1);
         if (c < (cost.get(w) ?? Infinity)) {
           cost.set(w, c);
           prev.set(w, u);

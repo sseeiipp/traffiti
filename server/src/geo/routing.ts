@@ -1,4 +1,5 @@
 import { haversine, pathLength, projectShape, resample, type LatLng } from './geometry.js';
+import { onBlockedXY } from './blocked.js';
 import { insideRoads, roadCoverage, roads, toLL, toXY, traceOnRoads } from './roads.js';
 
 /** OSRM 도보 경로 서버. 기본은 공개 서버(FOSSGIS), 자체 호스팅하면 OSRM_URL로 바꾼다. */
@@ -78,6 +79,44 @@ export function worstPart(shape: LatLng[], route: LatLng[], tol = 40, k = 8): nu
   return Math.round(Math.min(worst(a, b), worst(b, a)) * 100);
 }
 
+/**
+ * 멀리서 봤을 때 닮은 정도(0~100). 그림과 경로를 같은 크기의 칸(픽셀)으로 바꿔 비교한다.
+ * 칸 크기는 그림 크기의 1/20(30~100m)이라, 바둑판 길에서 원을 계단처럼 따라가도 같은 픽셀 그림이면 높게 나온다.
+ * 이웃 칸까지는 맞은 것으로 본다(한 블록 안쪽·바깥쪽으로 돌아도 형체는 같다).
+ */
+export function pixelCell(shape: LatLng[]) {
+  const lat = shape.map((p) => p[0]), lng = shape.map((p) => p[1]);
+  const cos = Math.cos((shape[0][0] * Math.PI) / 180);
+  const span = Math.max((Math.max(...lat) - Math.min(...lat)) * 111_320, (Math.max(...lng) - Math.min(...lng)) * 111_320 * cos);
+  return Math.min(100, Math.max(30, span / 20));
+}
+
+export function pixelSimilarity(shape: LatLng[], route: LatLng[]): number {
+  const cell = pixelCell(shape);
+  const o = shape[0];
+  const cos = Math.cos((o[0] * Math.PI) / 180);
+  const cells = (line: LatLng[]) => {
+    const set = new Set<string>();
+    for (const [la, ln] of resample(line, cell / 4)) set.add(`${Math.floor(((ln - o[1]) * 111_320 * cos) / cell)},${Math.floor(((la - o[0]) * 111_320) / cell)}`);
+    return set;
+  };
+  const near = (k: string, set: Set<string>) => {
+    const [x, y] = k.split(',').map(Number);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (set.has(`${x + i},${y + j}`)) return true;
+    return false;
+  };
+  const a = cells(shape), b = cells(route);
+  const ab = [...a].filter((k) => near(k, b)).length / a.size;
+  const ba = [...b].filter((k) => near(k, a)).length / b.size;
+  return Math.round(((ab + ba) / 2) * 100);
+}
+
+/** 길로 옮긴 경로를 픽셀 기준으로 잰다: 닮은 정도는 가까이서와 멀리서 중 높은 쪽, 조각 비교는 한 픽셀까지 허용 */
+function measure(shape: LatLng[], road: LatLng[]) {
+  const tol = Math.max(40, pixelCell(shape));
+  return { sim: Math.max(similarity(shape, road), pixelSimilarity(shape, road)), worst: worstPart(shape, road, tol) };
+}
+
 export interface FittedRoute {
   /** 그림을 옮겨 놓은 선 */
   shape: LatLng[];
@@ -136,12 +175,11 @@ function fitWithRoads(path: string, start: LatLng, meters: number): FittedRoute 
   cands.sort((a, b) => b.score - a.score);
   let best: (FittedRoute & { score: number }) | null = null;
   for (const c of cands.slice(0, 20)) {
-    const traced = traceOnRoads(g, c.shape);
+    const traced = traceOnRoads(g, c.shape, onBlockedXY);
     if (!traced) continue;
     // 막다른 길에 붙은 경유점은 수백 m를 들어갔다 나오므로 더 긴 되돌이까지 잘라낸다
     const road = trimEnds(despur(traced, 12, 600), c.shape);
-    const sim = similarity(c.shape, road);
-    const worst = worstPart(c.shape, road);
+    const { sim, worst } = measure(c.shape, road);
     const ratio = pathLength(road) / pathLength(c.shape);
     // 전체가 닮은 것과 함께, 귀·꼬리처럼 한 부분이 통째로 빠지지 않은 자리를 고른다
     const score = 0.6 * sim + 0.4 * worst - 30 * Math.max(0, ratio - 1.3) - Math.hypot(c.dn, c.de) / 200;
@@ -184,8 +222,7 @@ export async function fitToRoads(path: string, start: LatLng, meters: number): P
       if (!best) return { shape: projectShape(path, start, meters), road: null, similarity: null, movedM: 0 };
       break;
     }
-    const sim = similarity(shape, road);
-    const worst = worstPart(shape, road);
+    const { sim, worst } = measure(shape, road);
     const ratio = pathLength(road) / pathLength(shape);
     const score = 0.6 * sim + 0.4 * worst - 30 * Math.max(0, ratio - 1.3);
     if (!best || score > best.score) best = { shape, road, similarity: sim, worstPart: worst, movedM: Math.round(Math.hypot(dn, de)), score };

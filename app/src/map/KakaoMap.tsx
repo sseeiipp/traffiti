@@ -28,11 +28,12 @@ var map=null,objs=[],pending=null,fitKey=null;
 function post(m){try{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(m)}catch(e){}}
 function ll(p){return new kakao.maps.LatLng(p[0],p[1])}
 function line(pts,color,w,op,dash){var l=new kakao.maps.Polyline({path:pts.map(ll),strokeWeight:w,strokeColor:color,strokeOpacity:op,strokeStyle:dash?'shortdash':'solid'});l.setMap(map);objs.push(l)}
-function dot(p,color,r,halo){var c=document.createElement('div');c.style.cssText='width:'+(2*r)+'px;height:'+(2*r)+'px;border-radius:50%;background:'+color+';border:3px solid #fff;box-sizing:border-box;'+(halo?'box-shadow:0 0 0 10px '+color+'2E;':'');var o=new kakao.maps.CustomOverlay({position:ll(p),content:c,xAnchor:0.5,yAnchor:0.5,zIndex:3});o.setMap(map);objs.push(o)}
+function dot(p,color,r,halo,bc){var c=document.createElement('div');c.style.cssText='width:'+(2*r)+'px;height:'+(2*r)+'px;border-radius:50%;background:'+color+';border:3px solid '+(bc||'#fff')+';box-sizing:border-box;'+(halo?'box-shadow:0 0 0 10px '+color+'2E;':'');var o=new kakao.maps.CustomOverlay({position:ll(p),content:c,xAnchor:0.5,yAnchor:0.5,zIndex:3});o.setMap(map);objs.push(o)}
 function update(d){
   if(!map){pending=d;return}
   objs.forEach(function(o){o.setMap(null)});objs=[];
   d.lines.forEach(function(l){if(l.pts.length>1)line(l.pts,l.color,l.w,l.op,l.dash)});
+  if(d.end)dot(d.end,'#FFFFFF',7,false,'${C.ink}');
   if(d.start)dot(d.start,'${C.ink}',7,false);
   if(d.me)dot(d.me.pos,d.me.color,8,true);
   if(d.fitKey!==fitKey&&d.bounds.length){
@@ -54,12 +55,22 @@ if(typeof kakao==='undefined'){post('fail')}else{
 }
 </script></body></html>`;
 
+/** 시작과 끝이 60m 넘게 떨어진(돌아오지 않는) 코스면 끝 지점 */
+export function openEnd(route: LatLng[]): LatLng | null {
+  if (route.length < 2) return null;
+  const [a, b] = [route[0], route[route.length - 1]];
+  const k = Math.cos((a[0] * Math.PI) / 180);
+  return Math.hypot((b[0] - a[0]) * 110_570, (b[1] - a[1]) * 111_320 * k) > 60 ? b : null;
+}
+
 type Line = { pts: LatLng[]; color: string; w: number; op: number; dash: boolean };
 
 /** RouteArt와 같은 규칙으로 구간을 색별로 묶는다 */
 function build(p: RouteArtProps) {
   const { route, segments, mode = 'progress', stroke = 6, trail, me, showStart, hideRemaining, pad = 24, insetTop = 0, insetBottom = 0 } = p;
   const lines: Line[] = [];
+  // 주변의 못 가는 길은 맨 아래에 빨간 실선으로
+  for (const l of p.nearBlocked ?? []) lines.push({ pts: l, color: C.blocked, w: 4, op: 0.75, dash: false });
   if (p.target && p.target.length > 1) lines.push({ pts: p.target, color: C.target, w: 3, op: 1, dash: true });
   if (mode === 'target') lines.push({ pts: route, color: C.target, w: 3, op: 1, dash: true });
   else if (mode === 'route') lines.push({ pts: route, color: C.ink, w: stroke - 1, op: 1, dash: false });
@@ -75,15 +86,16 @@ function build(p: RouteArtProps) {
   }
   if (p.leg && p.leg.points.length > 1) lines.push({ pts: p.leg.points, color: p.leg.color, w: stroke + 3, op: 0.9, dash: false });
   if (trail && trail.points.length > 1) lines.push({ pts: trail.points, color: trail.color, w: stroke + 1, op: 1, dash: false });
+  for (const l of p.blocked ?? []) lines.push({ pts: l, color: C.blocked, w: stroke + 2, op: 1, dash: false });
   const bounds = [...route, ...(trail?.points ?? []), ...(p.target ?? [])];
   // 시트 높이가 바뀌어도 다시 맞춘다
   const fitKey = `${route.length}:${route[0]?.join()}:${route[route.length - 1]?.join()}:${insetTop}:${insetBottom}`;
-  return { lines, start: showStart ? route[0] ?? null : null, me: me ?? null, bounds, fitKey, pad, insetTop, insetBottom };
+  return { lines, start: showStart ? route[0] ?? null : null, end: showStart ? openEnd(route) : null, me: me ?? null, bounds, fitKey, pad, insetTop, insetBottom };
 }
 
 export function KakaoRouteMap({ fallback, ...p }: RouteArtProps & { fallback: ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'fail'>('loading');
-  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom, p.target, p.leg]);
+  const data = useMemo(() => build(p), [p.route, p.segments, p.mode, p.stroke, p.trail, p.me, p.showStart, p.hideRemaining, p.pad, p.insetTop, p.insetBottom, p.target, p.leg, p.blocked, p.nearBlocked]);
   const page = useMemo(() => html(KAKAO_JS_KEY), []);
   const web = useRef<WebViewHandle>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);
@@ -146,7 +158,9 @@ window.recenter=function(lat,lng){if(map)map.setCenter(new kakao.maps.LatLng(lat
 window.panBy=function(dx,dy){if(map)map.panBy(dx,dy)};
 window.zoomBy=function(d){if(map)map.setLevel(Math.max(1,Math.min(10,map.getLevel()+d)))};
 window.addEventListener('resize',function(){if(map){map.relayout();view()}});
-var meDot=null;
+var meDot=null,bl=[];
+window.blocked=function(ls){if(!map)return;bl.forEach(function(o){o.setMap(null)});bl=ls.map(function(l){
+  var o=new kakao.maps.Polyline({path:l.map(function(p){return new kakao.maps.LatLng(p[0],p[1])}),strokeWeight:4,strokeColor:'${C.blocked}',strokeOpacity:0.75});o.setMap(map);return o})};
 window.me=function(lat,lng){if(!map)return;var at=new kakao.maps.LatLng(lat,lng);
   if(!meDot){var c=document.createElement('div');c.style.cssText='width:18px;height:18px;border-radius:50%;background:#2F80ED;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 0 8px rgba(47,128,237,.18);';
     meDot=new kakao.maps.CustomOverlay({position:at,content:c,xAnchor:0.5,yAnchor:0.5,zIndex:3});meDot.setMap(map)}
@@ -176,6 +190,7 @@ export function KakaoDrawMap({
   onView,
   fallback,
   control,
+  blocked,
 }: {
   w: number;
   h: number;
@@ -189,6 +204,8 @@ export function KakaoDrawMap({
   control?: { current: DrawMapControl | null };
   onView: (v: MapView) => void;
   fallback: ReactNode;
+  /** 못 가는 길. 지도 위에 빨간 선으로 그린다 */
+  blocked?: LatLng[][];
 }) {
   const [state, setState] = useState<'loading' | 'ready' | 'fail'>(KAKAO_JS_KEY ? 'loading' : 'fail');
   // 처음 연 위치로만 페이지를 만들고, 이후 중심 이동은 recenter로 한다
@@ -218,6 +235,9 @@ export function KakaoDrawMap({
   useEffect(() => {
     if (state === 'ready' && me) run(`window.me(${me[0]},${me[1]})`);
   }, [me?.[0], me?.[1], state]);
+  useEffect(() => {
+    if (state === 'ready' && blocked?.length) run(`window.blocked(${JSON.stringify(blocked)})`);
+  }, [blocked, state]);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const h = (e: MessageEvent) => typeof e.data === 'string' && e.source === frame.current?.contentWindow && onMsg(e.data);

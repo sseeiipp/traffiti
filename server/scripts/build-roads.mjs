@@ -1,14 +1,17 @@
-// 지원 지역의 걸을 수 있는 길을 OpenStreetMap(Overpass)에서 받아 data/roads.bin.gz로 만든다.
-// 경로 제안이 이 도로망 위에서 그림 선에 가까운 길을 고른다. 지역을 넓히면 BBOX를 고치고 다시 실행한다.
+// 지원 지역(scripts/regions.mjs)의 걸을 수 있는 길을 OpenStreetMap(Overpass)에서 받아 data/roads.bin.gz로 만든다.
+// 경로 제안이 이 도로망 위에서 그림 선에 가까운 길을 고른다. 지역을 넓히면 regions.mjs에 범위를 더하고 다시 실행한다.
 //   node scripts/build-roads.mjs
 // 형식(리틀 엔디언): u32 노드 수 N, u32 간선 수 E, i32 위도×1e6 [N], i32 경도×1e6 [N], u32 (a, b) [E]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const BBOX = [37.505, 126.995, 37.59, 127.115]; // 남, 서, 북, 동 (지원 지역 + 그림이 뻗어 나갈 여유)
+import { REGIONS } from './regions.mjs';
+
 const HIGHWAY = 'footway|path|pedestrian|living_street|residential|service|unclassified|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|track|cycleway|steps|corridor';
-const q = `[out:json][timeout:180];
-way["highway"~"^(${HIGHWAY})$"]["access"!~"^(private|no)$"]["foot"!~"^(no|private)$"](${BBOX.join(',')});
+const q = `[out:json][timeout:300];
+(
+${REGIONS.map((r) => `  way["highway"~"^(${HIGHWAY})$"]["access"!~"^(private|no)$"]["foot"!~"^(no|private)$"](${r.bbox.join(',')});`).join('\n')}
+);
 (._;>;);
 out skel qt;`;
 

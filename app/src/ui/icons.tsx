@@ -119,6 +119,12 @@ export const IcInfo = ({ size = 15, color = C.sub2, w = 2 }: P) => (
     <Path d="M12 11v6M12 7.5v.5" {...line(color, w)} />
   </S>
 );
+export const IcTrash = ({ size = 18, color = C.ink, w = 1.9 }: P) => (
+  <S size={size}>
+    <Path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" stroke={color} strokeWidth={w} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </S>
+);
+
 export const IcClear = ({ size = 16 }: P) => (
   <S size={size}>
     <Circle cx={12} cy={12} r={10} fill={C.sub3} />

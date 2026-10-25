@@ -4,7 +4,9 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { config } from '../config.js';
 import { DbService } from '../db/db.service.js';
-import { Public } from './auth.guard.js';
+import { appPage, esc } from '../common/page.js';
+import { mailHtml, sendMail } from '../mail/mail.js';
+import { CurrentUser, Public, type AuthUser } from './auth.guard.js';
 import { AuthService, type Provider } from './auth.service.js';
 import { authorizeUrl, fetchProfile, isAllowedReturn, isConfigured, OAUTH_PROVIDERS, withQuery, type OAuthProvider } from './oauth.js';
 
@@ -55,8 +57,53 @@ export class AuthController {
 
   @Public()
   @Post('signup')
-  signup(@Body() b: { email: string; password: string; name: string; terms: any }) {
-    return this.auth.signupEmail(b);
+  async signup(@Body() b: { email: string; password: string; name: string; terms: any }) {
+    const out = await this.auth.signupEmail(b);
+    // 인증 메일은 가입을 막지 않는다. 늦게 와도 설정에서 다시 보낼 수 있다
+    void this.sendVerify((b.email ?? '').trim().toLowerCase());
+    return out;
+  }
+
+  private async sendVerify(email: string) {
+    const u = await this.db.one<{ id: number; verified: boolean }>(
+      `SELECT id, email_verified_at IS NOT NULL AS verified FROM users WHERE email = $1 AND deleted_at IS NULL`,
+      [email],
+    );
+    if (!u || u.verified) return false;
+    const token = this.jwt.sign({ sub: u.id, typ: 'verify', e: email }, { expiresIn: '3d' });
+    const link = `${config.publicUrl}/auth/email/verify?token=${encodeURIComponent(token)}`;
+    await sendMail(
+      email,
+      '[Travity] 이메일 주소를 확인해 주세요',
+      mailHtml('이메일 주소를 확인해 주세요', 'Travity에 가입해 주셔서 고마워요. 아래 버튼을 누르면 이 주소로 비밀번호 재설정 메일을 받을 수 있어요.', '이메일 인증하기', link),
+      link,
+    );
+    return true;
+  }
+
+  /** 인증 메일을 다시 보낸다 */
+  @HttpCode(200)
+  @Post('email/verify/resend')
+  async resendVerify(@CurrentUser() me: AuthUser) {
+    const u = await this.db.one<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [me.id]);
+    return { sent: u?.email ? await this.sendVerify(u.email) : false };
+  }
+
+  /** 메일의 인증 버튼이 여는 주소 */
+  @Public()
+  @Get('email/verify')
+  async verify(@Query('token') token: string, @Res() res: Response) {
+    try {
+      const p = this.jwt.verify<{ sub: number; typ: string; e: string }>(token ?? '');
+      if (p.typ !== 'verify') throw new Error();
+      await this.db.pool.query(
+        `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1 AND email = $2`,
+        [p.sub, p.e],
+      );
+      return appPage(res, { title: '이메일 인증 완료', heading: '이메일 인증을 마쳤어요', text: '이제 앱으로 돌아가 달리면 돼요.', appUrl: 'travity://', button: '앱으로 돌아가기' });
+    } catch {
+      return appPage(res, { status: 400, title: '링크 만료', heading: '링크가 만료됐어요', text: '앱의 설정에서 인증 메일을 다시 보내 주세요.' });
+    }
   }
 
   @Public()
@@ -152,7 +199,7 @@ export class AuthController {
     // 토큰은 기기에서 지운다. 서버 쪽 폐기 목록은 MVP 범위 밖.
   }
 
-  /** 재설정 링크를 보낸다. 메일 발송 연동 전이라 링크 토큰은 서버 로그에만 남긴다. */
+  /** 재설정 링크를 메일로 보낸다. RESEND_API_KEY가 없으면 서버 로그에만 남긴다. */
   @Public()
   @HttpCode(200)
   @Post('password/reset')
@@ -164,11 +211,40 @@ export class AuthController {
     );
     if (u) {
       const token = this.jwt.sign({ sub: u.id, typ: 'reset' }, { expiresIn: '30m' });
-      this.log.log(`reset link for ${email}: travity://reset?token=${token}`);
-      return { sent: true, devToken: config.prod ? undefined : token };
+      const link = `${config.publicUrl}/auth/password/reset/open?token=${encodeURIComponent(token)}`;
+      const mailed = await sendMail(
+        email,
+        '[Travity] 비밀번호 재설정 링크',
+        mailHtml('비밀번호를 다시 정해 주세요', '아래 버튼을 눌러 새 비밀번호를 정해 주세요. 링크는 30분 동안만 쓸 수 있어요. 요청한 적이 없다면 이 메일은 무시해도 돼요.', '비밀번호 재설정', link),
+        link,
+      );
+      if (!mailed) this.log.log(`reset link for ${email}: travity://reset?token=${token}`);
+      // 메일을 못 보내는 개발 환경에서는 앱이 바로 다음 단계로 넘어가게 토큰을 돌려준다
+      return { sent: true, devToken: config.prod || mailed ? undefined : token };
     }
     // 가입 여부를 알려주지 않는다
     return { sent: true };
+  }
+
+  /** 메일의 재설정 버튼이 여는 페이지. 앱을 열거나, 앱이 없으면 이 페이지에서 바로 바꾼다 */
+  @Public()
+  @Get('password/reset/open')
+  resetOpen(@Query('token') token: string, @Res() res: Response) {
+    const t = token ?? '';
+    const form = `<form id="f" style="width:100%;display:flex;flex-direction:column;gap:10px">
+<input id="pw" type="password" minlength="8" placeholder="새 비밀번호(8자 이상)" autocomplete="new-password" required>
+<button class="btn" type="submit" style="background:#111;color:#fff">웹에서 바로 바꾸기</button><p id="msg" class="muted"></p></form>
+<script>document.getElementById('f').onsubmit=async function(e){e.preventDefault();var m=document.getElementById('msg');m.textContent='바꾸는 중…';
+try{var r=await fetch('${esc(config.publicUrl)}/auth/password/confirm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:${JSON.stringify(t).replace(/</g, '\\u003c')},password:document.getElementById('pw').value})});
+var j=await r.json();m.textContent=j.ok?'바꿨어요. 앱에서 새 비밀번호로 로그인해 주세요.':(j.message||'다시 시도해 주세요.');}catch(_){m.textContent='연결이 끊겼어요. 다시 시도해 주세요.'}};</script>`;
+    return appPage(res, {
+      title: '비밀번호 재설정',
+      heading: '비밀번호 재설정',
+      text: '앱에서 열거나, 여기서 바로 새 비밀번호를 정할 수 있어요.',
+      appUrl: `travity://reset?token=${encodeURIComponent(t)}`,
+      button: '앱에서 열기',
+      body: form,
+    });
   }
 
   @Public()

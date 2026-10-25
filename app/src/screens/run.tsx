@@ -7,7 +7,9 @@ import { useAction, useChallenge, useCrew, useMe, useRun as useRunQuery, useUnit
 import { RouteArt, type LatLng } from '../map/MapArt';
 import type { P } from '../navigation/types';
 import { START_SPOTS } from '../store/draft';
+import { useAuth } from '../store/auth';
 import { newClientId, useRun } from '../store/run';
+import { askBackground, backgroundStatus, startBackground, stopBackground } from '../run/background';
 import { densify, distanceOf, finishRun, haversine, simulationPath, SIMULATE, uploadPending } from '../run/engine';
 import { C } from '../theme';
 import { IcChevron, IcLocate, IcPlay, IcPause } from '../ui/icons';
@@ -24,6 +26,7 @@ import {
   ProgressBar,
   RoundBtn,
   Screen,
+  Sheet,
   Stat,
   Sub,
   T,
@@ -183,19 +186,21 @@ export function Running({ navigation, route }: P<'Running'>) {
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(Date.now());
   const sim = useRef<{ path: LatLng[]; i: number; t: number } | null>(null);
+  // 백그라운드 위치를 처음 쓰는 러닝이면 왜 필요한지 먼저 알려 주고 묻는다
+  const [bgAsk, setBgAsk] = useState(false);
+  const watch = useRef<Location.LocationSubscription | null>(null);
 
   const myColor = ch.data?.myColor ?? crew.data?.members.find((m) => m.isMe)?.color ?? '#7A5AF8';
 
   // 러닝 시작(이미 같은 챌린지의 기록이 있으면 이어서)
   useEffect(() => {
     const cur = useRun.getState().session;
-    if (!cur || cur.challengeId !== challengeId) useRun.getState().start({ clientId: newClientId(), challengeId, simulated: SIMULATE });
+    if (!cur || cur.challengeId !== challengeId) useRun.getState().start({ clientId: newClientId(), challengeId, simulated: SIMULATE || useAuth.getState().demoGps });
   }, [challengeId]);
 
-  // 위치 받기
+  // 위치 받기. 백그라운드 위치가 허용돼 있으면 화면이 꺼져도 받고, 아니면 화면이 켜져 있는 동안만 받는다
   useEffect(() => {
     if (!session || session.simulated) return;
-    let sub: Location.LocationSubscription | null = null;
     let cancelled = false;
     (async () => {
       const p = await Location.requestForegroundPermissionsAsync();
@@ -204,15 +209,31 @@ export function Running({ navigation, route }: P<'Running'>) {
         return;
       }
       if (cancelled) return;
-      sub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5, timeInterval: 2000 }, (l) =>
+      const bg = await backgroundStatus();
+      if (bg === 'granted' && (await startBackground())) return;
+      if (cancelled) return;
+      watch.current = await Location.watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 5, timeInterval: 2000 }, (l) =>
         useRun.getState().addPoint({ lat: l.coords.latitude, lng: l.coords.longitude, t: l.timestamp, accuracy: l.coords.accuracy ?? null }),
       );
+      if (bg === 'undetermined' && !cancelled) setBgAsk(true);
     })();
     return () => {
       cancelled = true;
-      sub?.remove();
+      watch.current?.remove();
+      watch.current = null;
+      // 화면을 떠나면 이 화면이 받던 위치를 멈춘다(러닝 기록은 기기에 남아 다시 들어오면 이어진다)
+      stopBackground();
     };
   }, [session?.clientId, session?.simulated, navigation]);
+
+  /** 첫 러닝 안내에서 '허용'을 누르면 백그라운드 위치로 바꾼다 */
+  const allowBackground = async () => {
+    setBgAsk(false);
+    if ((await askBackground()) && (await startBackground())) {
+      watch.current?.remove();
+      watch.current = null;
+    }
+  };
 
   // 시연용 가짜 위치: 비어 있는 구간을 따라 2.5m/s로(화면에서는 빠르게) 움직인다
   useEffect(() => {
@@ -398,6 +419,19 @@ export function Running({ navigation, route }: P<'Running'>) {
           )}
         </View>
       </Glass>
+      {/* 첫 러닝: 화면이 꺼져도 기록하려면 '항상 허용'이 필요하다고 알려 주고 묻는다 */}
+      <Sheet open={bgAsk} onClose={() => setBgAsk(false)}>
+        <View style={{ gap: 14 }}>
+          <T size={20} weight="700">
+            화면이 꺼져도 계속 기록할까요?
+          </T>
+          <T size={14} color={C.body2} lh={1.5}>
+            주머니에 폰을 넣고 달려도 길이 끊기지 않게, 러닝을 기록하는 동안에만 위치를 '항상 허용'으로 받아요. 러닝이 끝나면 위치를 받지 않아요.
+          </T>
+          <Btn title="허용하고 달리기" onPress={allowBackground} />
+          <Btn title="화면을 켜 두고 달릴게요" kind="secondary" onPress={() => setBgAsk(false)} />
+        </View>
+      </Sheet>
     </View>
   );
 }

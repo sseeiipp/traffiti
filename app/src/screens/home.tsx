@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { api } from '../api/client';
-import { useAction, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, useUnit, type Challenge } from '../api/hooks';
+import { useAction, useActiveChallenges, useArtworks, useCurrentChallenge, useCurrentCrewId, useFriendCurrent, useMe, useMyCrews, useUnit, type Challenge } from '../api/hooks';
 import { RouteArt } from '../map/MapArt';
 import type { P, Stack, Tabs } from '../navigation/types';
 import { useAuth } from '../store/auth';
@@ -80,6 +80,7 @@ export function Home({ navigation }: HomeProps) {
   const crews = useMyCrews();
   const me = useMe();
   const ch = useCurrentChallenge(crewId);
+  const actives = useActiveChallenges(crewId);
   const works = useArtworks('crew', crewId);
   const friend = useFriendCurrent();
   const setAuth = useAuth((s) => s.set);
@@ -185,6 +186,35 @@ export function Home({ navigation }: HomeProps) {
           </View>
         </Glass>
       )}
+
+      {/* 크루당 챌린지 개수 제한이 없어서, 위 대표 챌린지 말고 함께 진행 중인 챌린지를 아래에 모은다 */}
+      {(actives.data ?? []).filter((x) => x.id !== c?.id).length ? (
+        <View style={{ gap: 10 }}>
+          <T size={16} weight="700">
+            함께 진행 중인 챌린지
+          </T>
+          {(actives.data ?? [])
+            .filter((x) => x.id !== c?.id)
+            .map((x) => (
+              <Tap key={x.id} onPress={() => navigation.navigate('ChallengeJoin', { challengeId: x.id })}>
+                <Glass style={{ borderRadius: 20, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden', backgroundColor: C.map.land }}>
+                    <RouteArt route={x.route} segments={x.segments} w={56} h={56} pad={6} stroke={3} map={false} />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <T size={15} weight="600" numberOfLines={1}>
+                      {x.name} 코스
+                    </T>
+                    <T size={12} color={C.sub}>
+                      {pct(x.progress)} · {x.daysLeft}일 남음 · {fmtKm(x.distanceKm, unit)}
+                    </T>
+                  </View>
+                  <Btn title="달리기" height={36} textSize={14} style={{ width: 80 }} onPress={() => navigation.navigate('Running', { challengeId: x.id })} />
+                </Glass>
+              </Tap>
+            ))}
+        </View>
+      ) : null}
 
       <View style={{ gap: 12 }}>
         <View style={{ gap: 10 }}>

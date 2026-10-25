@@ -117,10 +117,13 @@ CREATE TABLE IF NOT EXISTS challenges (
   completed_at TIMESTAMPTZ,
   cancelled_at TIMESTAMPTZ
 );
--- 크루당 진행 중 챌린지 1개
-CREATE UNIQUE INDEX IF NOT EXISTS challenges_one_active ON challenges (crew_id) WHERE status = 'active' AND crew_id IS NOT NULL;
+-- 크루당 진행 중 챌린지 개수 제한은 없앴다(예전 DB에 남은 유니크 인덱스는 지운다)
+DROP INDEX IF EXISTS challenges_one_active;
+CREATE INDEX IF NOT EXISTS challenges_crew_active ON challenges (crew_id, created_at DESC) WHERE status = 'active';
 -- 친구 챌린지는 오늘 24시까지. 시간이 끝나면 내일 24시까지 한 번만 연장할 수 있다
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS extended_at TIMESTAMPTZ;
+-- 직접 그린 코스의 원래 그림(SVG path). 썸네일을 사용자가 그린 모양 그대로 보여 준다
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS custom_path TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS challenges_friend_code ON challenges (friend_code) WHERE friend_code IS NOT NULL AND status = 'active';
 
 CREATE TABLE IF NOT EXISTS challenge_participations (
@@ -237,6 +240,7 @@ UPDATE crews SET has_photo = false WHERE has_photo AND photo_url IS NULL;
 UPDATE users SET profile_image_url = NULL WHERE profile_image_url = 'placeholder';
 -- 지운 작품의 러닝: 거리 합계·XP는 남기고 달력에서만 숨긴다
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS challenge_deleted BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 -- 이 표시 전에 지운 작품의 러닝: 챌린지 진행률이 기록됐는데 챌린지 연결이 끊긴 것
 UPDATE runs SET challenge_deleted = true WHERE challenge_id IS NULL AND progress_before IS NOT NULL AND NOT challenge_deleted;
 `;

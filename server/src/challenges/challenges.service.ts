@@ -13,6 +13,7 @@ import { hasBannedWord, pickFreeColor, randomCode } from '../common/util.js';
 import { difficultyOf, shapeByKey, SHAPES } from '../geo/shapes.js';
 import { LatLng, pathLength, resample } from '../geo/geometry.js';
 import { fitToRoads } from '../geo/routing.js';
+import { blockedLines, blockedStretches } from '../geo/blocked.js';
 
 /** 경로 한 구간의 길이(m). 진행률은 이 단위로 센다. */
 export const SEG_M = 20;
@@ -53,13 +54,29 @@ export class ChallengesService {
     private readonly crews: CrewsService,
   ) {}
 
+  /** 지도에 빨간 선으로 그릴 못 가는 길. 범위를 주면 그 안만 */
+  blocked(q: { minLat?: string; minLng?: string; maxLat?: string; maxLng?: string }) {
+    const n = [q.minLat, q.minLng, q.maxLat, q.maxLng].map(Number);
+    const bbox = n.every((v) => Number.isFinite(v)) ? { minLat: n[0], minLng: n[1], maxLat: n[2], maxLng: n[3] } : undefined;
+    return blockedLines(bbox).map((l) => l.map(([a, b]) => [Math.round(a * 1e5) / 1e5, Math.round(b * 1e5) / 1e5]));
+  }
+
   library() {
-    return SHAPES.map((s) => ({ key: s.key, label: s.label, km: s.km, difficulty: difficultyOf(s.km), library: s.library }));
+    return SHAPES.map((s) => ({
+      key: s.key,
+      label: s.label,
+      km: s.km,
+      difficulty: difficultyOf(s.km),
+      library: s.library,
+      category: s.category,
+      pick: !!s.pick,
+    }));
   }
 
   /**
    * 경로 제안. 그림을 출발 지점에 맞춰 실제 좌표로 옮긴 뒤, OSRM 도보 경로로 도로를 따라 이어 붙인다.
    * 경로 서버에 닿지 않으면 그림 선을 그대로 쓰고 닮은 정도는 null로 둔다.
+   * 닮은 정도가 낮아도 실패로 돌려보내지 않고 경로를 보여 준 뒤 안내 문구로 알려 준다.
    */
   async suggest(input: RouteInput) {
     const start = input.start ?? DEFAULT_START;
@@ -70,30 +87,25 @@ export class ChallengesService {
     const fit = await fitToRoads(custom ? input.customPath! : shape!.path, start, km * 1000);
     const route = resample(fit.road ?? fit.shape, SEG_M);
     const meters = pathLength(route);
-    // 길이 끊기거나, 그림과 많이 다르거나, 돌아가느라 길이가 크게 늘면 이상한 경로를 보여주지 않고 다시 그리게 한다
+    // 닮은 정도가 낮아도 일단 결과를 보여 준다(다시 그릴지는 사람이 고른다). 대신 무엇이 달라졌는지 맨 앞에 알려 준다
     const stretch = fit.road ? meters / Math.max(1, pathLength(fit.shape)) : 0;
-    if (!fit.road || fit.similarity == null || fit.similarity < REDRAW_SIM || (fit.worstPart ?? 100) < REDRAW_PART || stretch > REDRAW_STRETCH) {
-      return {
-        ok: false as const,
-        reason: !fit.road
-          ? '그림을 이어 줄 길을 찾지 못했어요. 길이 많은 곳에서 그림을 조금 단순하게 다시 그려 주세요.'
-          : custom
-            ? '길로 옮기면 그림 모양이 많이 달라져요. 선을 조금 단순하고 크게 다시 그려 주세요.'
-            : '이 출발 지점에서는 길로 옮기면 그림이 많이 달라져요. 출발 지점을 옮기거나 다른 그림을 골라 주세요.',
-        alternatives: custom
-          ? ['그림 다시 그리기', '출발 지점 옮기기', '비슷한 검증된 코스 보기']
-          : ['다른 그림 고르기', '출발 지점 옮기기', '비슷한 검증된 코스 보기'],
-        similarity: fit.similarity,
-      };
-    }
-    const notes: string[] = [];
+    const warn: string[] = [];
+    if (!fit.road) warn.push('그림을 이어 줄 길을 찾지 못해서 그린 선을 그대로 보여 줘요. 길이 없는 곳이 있을 수 있어요.');
+    else if (fit.similarity != null && fit.similarity < REDRAW_SIM)
+      warn.push(`길로 옮기면서 그림과 닮은 정도가 ${fit.similarity}%로 낮아졌어요. ${custom ? '선을 조금 단순하고 크게 그리면' : '출발 지점을 옮기면'} 더 닮게 나와요.`);
+    else if ((fit.worstPart ?? 100) < REDRAW_PART) warn.push('그림 한 부분이 길과 많이 달라요. 지도에서 빨간 점선과 비교해 보세요.');
+    if (stretch > REDRAW_STRETCH) warn.push(`길을 따라 돌아가느라 그림보다 ${Math.round(stretch * 10) / 10}배 길어졌어요.`);
+    const notes: string[] = [...warn];
     {
       const m = fit.movedM, d = Math.abs(fit.rotatedDeg ?? 0);
       if (m && d) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮기고 ${d}° 돌려 놓았어요.`);
       else if (m) notes.push(`길에 잘 맞도록 그림을 ${m}m 옮겨 놓았어요.`);
       else if (d) notes.push(`길에 잘 맞도록 그림을 ${d}° 돌려 놓았어요.`);
-      if (fit.similarity! < 80) notes.push('길이 없는 곳은 가까운 도로로 돌아가서 그림과 다른 곳이 있어요.');
+      if (fit.road && (fit.similarity ?? 0) >= REDRAW_SIM && fit.similarity! < 80) notes.push('길이 없는 곳은 가까운 도로로 돌아가서 그림과 다른 곳이 있어요.');
     }
+    // 경로가 어쩔 수 없이 못 가는 길(보도 없는 큰 길 등)을 따라가는 곳은 지도에 빨갛게 덧그리고 알려 준다
+    const unsafe = blockedStretches(route);
+    if (unsafe.length) notes.push(`빨간색으로 표시한 ${unsafe.length}곳은 걸어서 다니기 어려운 길이에요. 달리기 전에 꼭 확인해 주세요.`);
     return {
       ok: true as const,
       route,
@@ -101,7 +113,8 @@ export class ChallengesService {
       difficulty: difficultyOf(meters / 1000),
       similarity: fit.similarity,
       // 앱이 제안 경로 아래에 원래 그림을 겹쳐 보여줄 수 있게 함께 보낸다
-      target: fit.road ? resample(fit.shape, SEG_M) : null,
+      target: resample(fit.shape, SEG_M),
+      blocked: unsafe,
       notes,
     };
   }
@@ -129,7 +142,7 @@ export class ChallengesService {
       throw new ForbiddenException('이 크루는 크루장만 챌린지를 만들 수 있어요.');
     }
     const r = await this.suggest(b);
-    if (!r.ok) throw new BadRequestException(r.reason);
+    // 경로 제안은 닮은 정도가 낮아도 결과를 돌려준다(실패하지 않는다)
     const shapeKey = b.customPath ? 'custom' : b.shapeKey!;
     const title = b.customPath ? '직접 그린 코스' : `${shapeByKey(shapeKey)!.label} 챌린지`;
     const startAt = b.startDate ? new Date(b.startDate) : new Date();
@@ -139,8 +152,8 @@ export class ChallengesService {
       try {
         const row = await this.db.one<{ id: number }>(
           `INSERT INTO challenges (crew_id, created_by, shape_key, title, drawing_mode, start_at, end_at, visibility, gps_visibility,
-             area_label, start_label, target_distance_m, difficulty, route_points)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+             area_label, start_label, target_distance_m, difficulty, route_points, custom_path)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
           [
             crewId,
             userId,
@@ -156,12 +169,12 @@ export class ChallengesService {
             Math.round(r.distanceKm * 1000),
             r.difficulty,
             JSON.stringify(r.route),
+            b.customPath ? b.customPath.slice(0, 20_000) : null,
           ],
           c,
         );
         return { id: row!.id };
       } catch (e: any) {
-        if (e.code === '23505') throw new ConflictException('진행 중인 챌린지가 이미 있어요. 크루당 하나씩만 진행할 수 있어요.');
         throw e;
       }
     });
@@ -171,8 +184,39 @@ export class ChallengesService {
     await this.crews.assertMember(userId, crewId);
     // 기간이 끝난 챌린지가 10분 정리 주기 전까지 홈에 '진행 중'으로 남지 않게 먼저 정리한다
     await this.expire();
-    const row = await this.db.one<{ id: number }>(`SELECT id FROM challenges WHERE crew_id = $1 AND status = 'active'`, [crewId]);
+    // 여러 개가 진행 중이면 가장 최근에 연 챌린지를 홈 대표로 보여 준다
+    const row = await this.db.one<{ id: number }>(
+      `SELECT id FROM challenges WHERE crew_id = $1 AND status = 'active' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [crewId],
+    );
     return row ? this.view(userId, row.id) : null;
+  }
+
+  /** 크루의 진행 중 챌린지 전부(최근 순). 크루당 개수 제한이 없다 */
+  async activeList(userId: number, crewId: number) {
+    await this.crews.assertMember(userId, crewId);
+    await this.expire();
+    const rows = await this.db.many<{ id: number }>(
+      `SELECT id FROM challenges WHERE crew_id = $1 AND status = 'active' ORDER BY created_at DESC, id DESC LIMIT 30`,
+      [crewId],
+    );
+    const out = [];
+    for (const r of rows) {
+      const v = await this.view(userId, r.id);
+      out.push({
+        id: v.id,
+        name: v.name,
+        title: v.title,
+        shapeKey: v.shapeKey,
+        customPath: v.customPath,
+        progress: v.progress,
+        daysLeft: v.daysLeft,
+        distanceKm: v.distanceKm,
+        route: v.route,
+        segments: v.segments,
+      });
+    }
+    return out;
   }
 
   private async canView(userId: number, ch: any, db: Queryable = this.db.pool) {
@@ -285,6 +329,7 @@ export class ChallengesService {
       isFriend: !ch.crew_id,
       friendCode: ch.friend_code,
       shapeKey: ch.shape_key,
+      customPath: ch.custom_path ?? null,
       title: ch.title,
       category: ch.category,
       name: ch.category ?? (ch.shape_key === 'custom' ? '직접 그린 코스' : shapeByKey(ch.shape_key)?.label ?? ch.title),
@@ -374,7 +419,7 @@ export class ChallengesService {
     const shape = shapeByKey(b.shapeKey);
     if (!shape) throw new BadRequestException('그림을 골라 주세요.');
     const r = await this.suggest({ shapeKey: b.shapeKey, start: b.start });
-    if (!r.ok) throw new BadRequestException(r.reason);
+    // 경로 제안은 닮은 정도가 낮아도 결과를 돌려준다(실패하지 않는다)
     return this.db.tx(async (c) => {
       for (let i = 0; i < 20; i++) {
         const code = randomCode();
@@ -561,6 +606,8 @@ export class ChallengesService {
         status: v.status,
         progress: v.progress,
         endedAt: v.completedAt ?? v.cancelledAt ?? v.endAt,
+        shapeKey: v.shapeKey,
+        customPath: v.customPath,
         route: v.route,
         segments: v.segments,
       });

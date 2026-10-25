@@ -27,6 +27,11 @@ export const config = {
     process.env.PUBLIC_URL ??
     (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${process.env.PORT ?? 3000}`)
   ).replace(/\/$/, ''),
+  // 비밀번호 재설정·이메일 인증 메일. 키가 없으면 링크를 서버 로그에만 남긴다
+  mail: {
+    resendKey: process.env.RESEND_API_KEY ?? '',
+    from: process.env.MAIL_FROM ?? 'Travity <onboarding@resend.dev>',
+  },
   // 키가 있는 제공자만 실제 로그인을 연다. 없으면 앱이 데모 로그인으로 넘어간다
   oauth: {
     kakao: { id: process.env.KAKAO_REST_API_KEY ?? '', secret: process.env.KAKAO_CLIENT_SECRET ?? '' },

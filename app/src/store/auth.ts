@@ -15,6 +15,8 @@ interface AuthState {
   crewId: number | null;
   /** 가입 뒤 크루 정하기에서 '크루 없이 하기'를 골랐는지. 다음에 열 때 바로 홈으로 */
   crewSkipped: boolean;
+  /** 시연 모드: 실제 GPS 대신 챌린지 경로를 따라 움직이는 가짜 위치로 달린다(실내 발표용) */
+  demoGps: boolean;
   /** 가입 진행 중인 정보(03-0 → 03-1 → 03-2) */
   signup: {
     provider: Provider;
@@ -39,6 +41,7 @@ export const useAuth = create<AuthState>()(
       deviceId: `device-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`,
       crewId: null,
       crewSkipped: false,
+      demoGps: false,
       signup: null,
       hydrated: false,
       setTokens: (t) => set({ accessToken: t.accessToken, refreshToken: t.refreshToken }),
@@ -48,7 +51,7 @@ export const useAuth = create<AuthState>()(
     {
       name: 'crew-auth',
       storage,
-      partialize: ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped }) => ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped }),
+      partialize: ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped, demoGps }) => ({ accessToken, refreshToken, introSeen, deviceId, crewId, crewSkipped, demoGps }),
       onRehydrateStorage: () => () => useAuth.setState({ hydrated: true }),
     },
   ),

@@ -76,7 +76,7 @@ export interface CrewDetail {
   artworkVisibility?: 'crew' | 'public';
   discoverable?: boolean;
   myNotify?: boolean;
-  activeChallenge?: { id: number; title: string; shapeKey: string; progress: number; endAt: string } | null;
+  activeChallenge?: { id: number; title: string; shapeKey: string; customPath?: string | null; progress: number; endAt: string } | null;
   members: Member[];
   joinRequests?: { id: number; userId: number; name: string; createdAt: string }[];
   invite?: { code: string; expiresAt: string } | null;
@@ -100,6 +100,8 @@ export interface Challenge {
   isFriend: boolean;
   friendCode: string | null;
   shapeKey: string;
+  /** 직접 그린 코스의 원래 그림(SVG path) */
+  customPath?: string | null;
   title: string;
   category: string | null;
   name: string;
@@ -159,6 +161,8 @@ export interface Artwork {
   status: string;
   progress: number;
   endedAt: string;
+  shapeKey?: string;
+  customPath?: string | null;
   route: LatLng[];
   segments: (string | null)[];
 }
@@ -177,6 +181,7 @@ export interface RunSummary {
     id: number;
     title: string;
     shapeKey: string;
+    customPath?: string | null;
     shapeLabel: string;
     status: string;
     isFriend: boolean;
@@ -232,6 +237,28 @@ export function useCurrentCrewId(): number | null {
 export const useCrew = (id: number | null | undefined) =>
   useQuery({ queryKey: ['crew', id], queryFn: () => api<CrewDetail>(`/crews/${id}`), enabled: !!id });
 
+/** 크루의 진행 중 챌린지 전부(최근 순). 크루당 개수 제한이 없다 */
+export const useActiveChallenges = (crewId: number | null) =>
+  useQuery({
+    queryKey: ['challenge', 'active', crewId],
+    queryFn: () =>
+      api<
+        {
+          id: number;
+          name: string;
+          title: string;
+          shapeKey: string;
+          customPath: string | null;
+          progress: number;
+          daysLeft: number;
+          distanceKm: number;
+          route: LatLng[];
+          segments: (string | null)[];
+        }[]
+      >(`/crews/${crewId}/challenges/active`),
+    enabled: !!crewId,
+  });
+
 export const useCurrentChallenge = (crewId: number | null) =>
   useQuery({
     queryKey: ['challenge', 'current', crewId],
@@ -269,11 +296,36 @@ export const useRankings = (q: { type: 'completion_rate' | 'xp'; period: 'monthl
       ),
   });
 
+/** 걸어서 다니면 안 되는 길(지원 지역 전체). 바뀌지 않으므로 한 번만 받는다 */
+export const useBlockedRoads = (enabled = true) => {
+  const token = useAuth((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['blocked'],
+    queryFn: () => api<LatLng[][]>('/blocked'),
+    enabled: enabled && !!token,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 1,
+  });
+};
+
+export interface CollectionItem {
+  key: string;
+  label: string;
+  state: 'got' | 'half' | 'none' | 'locked';
+  /** 라이브러리 기본 거리(km). 나만의 그림은 0 */
+  km?: number;
+  /** 크루가 이 그림을 가장 많이 채운 정도(0~1) */
+  progress?: number;
+  /** 나만의 그림: 직접 그린 원래 그림 */
+  path?: string | null;
+}
+
 export const useCollection = (crewId: number | null) =>
   useQuery({
     queryKey: ['collection', crewId],
     queryFn: () =>
-      api<{ got: number; total: number; sets: { name: string; reward: string; got: number; total: number; items: { key: string; label: string; state: 'got' | 'half' | 'none' | 'locked' }[] }[] }>(
+      api<{ got: number; total: number; sets: { name: string; reward: string; got: number; total: number; items: CollectionItem[] }[] }>(
         `/crews/${crewId}/collection`,
       ),
     enabled: !!crewId,

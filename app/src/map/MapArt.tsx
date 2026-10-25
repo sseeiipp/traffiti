@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
+import { useBlockedRoads } from '../api/hooks';
 import { C } from '../theme';
-import { KAKAO_JS_KEY, KakaoRouteMap } from './KakaoMap';
+import { KAKAO_JS_KEY, KakaoRouteMap, openEnd } from './KakaoMap';
 import { SHAPE_ICONS } from './shapes';
 
 export type LatLng = [number, number];
@@ -96,13 +97,39 @@ export interface RouteArtProps {
   insetBottom?: number;
   /** 손가락으로 지도를 옮기고 확대·축소할 수 있게 */
   interactive?: boolean;
+  /** 경로가 못 가는 길을 따라가는 곳. 경로 위에 빨간 실선으로 덧그린다 */
+  blocked?: LatLng[][] | null;
+  /** 지도에 주변의 못 가는 길을 빨간 선으로 보여 줄지(지도 바탕이 있을 때 기본 켜짐) */
+  showBlocked?: boolean;
+  /** RouteArt가 채운다: 경로 주변의 못 가는 길 */
+  nearBlocked?: LatLng[][];
+}
+
+/** 경로 둘레(약 1.5km 여유) 안을 지나는 못 가는 길만 고른다 */
+export function blockedAround(all: LatLng[][] | undefined, pts: LatLng[], margin = 0.015): LatLng[][] {
+  if (!all?.length || !pts.length) return [];
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const [a, b] of pts) {
+    minLat = Math.min(minLat, a); maxLat = Math.max(maxLat, a);
+    minLng = Math.min(minLng, b); maxLng = Math.max(maxLng, b);
+  }
+  minLat -= margin; maxLat += margin; minLng -= margin * 1.3; maxLng += margin * 1.3;
+  return all.filter((l) => l.some(([a, b]) => a >= minLat && a <= maxLat && b >= minLng && b <= maxLng));
 }
 
 /** 지도 바탕이 필요하면 카카오맵, 키가 없거나 불러오지 못하면 단순화한 SVG 지도 */
 export function RouteArt(props: RouteArtProps) {
-  const svg = <SvgRouteArt {...props} />;
-  if (props.map === false || props.svgOnly || !KAKAO_JS_KEY || !props.route.length) return svg;
-  return <KakaoRouteMap {...props} fallback={svg} />;
+  const withMap = props.map !== false && !props.svgOnly;
+  const want = withMap && (props.showBlocked ?? true);
+  const all = useBlockedRoads(want);
+  const nearBlocked = useMemo(
+    () => (want ? blockedAround(all.data, [...props.route, ...(props.target ?? []), ...(props.me ? [props.me.pos] : [])]) : []),
+    [want, all.data, props.route, props.target, props.me?.pos],
+  );
+  const p = { ...props, nearBlocked };
+  const svg = <SvgRouteArt {...p} />;
+  if (!withMap || !KAKAO_JS_KEY || !props.route.length) return svg;
+  return <KakaoRouteMap {...p} fallback={svg} />;
 }
 
 function SvgRouteArt({
@@ -124,6 +151,8 @@ function SvgRouteArt({
   target,
   insetTop = 0,
   insetBottom = 0,
+  blocked,
+  nearBlocked,
 }: RouteArtProps) {
   const groups = useMemo(() => {
     if (!route.length) return { f: null, runs: [] as { color: string | null; pts: [number, number][] }[] };
@@ -147,6 +176,7 @@ function SvgRouteArt({
     <Svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
       {map ? <MapBackdrop w={w} h={h} seed={seed} /> : bg ? <Rect width={w} height={h} fill={bg} /> : null}
       <G fill="none" strokeLinecap="round" strokeLinejoin="round">
+        {nearBlocked?.map((l, i) => <Path key={`nb${i}`} d={toD(l.map(f))} stroke={C.blocked} strokeWidth={4} strokeOpacity={0.75} />)}
         {target && target.length > 1 ? <Path d={toD(target.map(f))} stroke={C.target} strokeWidth={3} strokeDasharray="2 7" /> : null}
         {mode === 'target' ? (
           <Path d={toD(route.map(f))} stroke={C.target} strokeWidth={3} strokeDasharray="2 7" />
@@ -163,7 +193,11 @@ function SvgRouteArt({
         )}
         {leg && leg.points.length > 1 ? <Path d={toD(leg.points.map(f))} stroke={leg.color} strokeWidth={stroke + 3} strokeOpacity={0.9} /> : null}
         {trail && trail.points.length > 1 ? <Path d={toD(trail.points.map(f))} stroke={trail.color} strokeWidth={stroke + 1} /> : null}
+        {blocked?.map((l, i) => <Path key={`b${i}`} d={toD(l.map(f))} stroke={C.blocked} strokeWidth={stroke + 2} />)}
       </G>
+      {showStart && openEnd(route) ? (
+        <Circle cx={f(openEnd(route)!)[0]} cy={f(openEnd(route)!)[1]} r={7} fill="#FFFFFF" stroke={C.ink} strokeWidth={3} />
+      ) : null}
       {showStart ? <Circle cx={start[0]} cy={start[1]} r={7} fill={C.ink} stroke="#FFFFFF" strokeWidth={3} /> : null}
       {me ? (
         <G>
@@ -175,7 +209,30 @@ function SvgRouteArt({
   );
 }
 
-/** 그림 아이콘(라이브러리·도감·작은 썸네일) */
+/** 절대 좌표 path(M/L/C/Z)의 점들로 맞춘 viewBox와 선 굵기. 직접 그린 그림 썸네일용 */
+function pathBox(d: string, padK = 0.08) {
+  const nums = (d.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number);
+  if (nums.length < 4) return null;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    minX = Math.min(minX, nums[i]); maxX = Math.max(maxX, nums[i]);
+    minY = Math.min(minY, nums[i + 1]); maxY = Math.max(maxY, nums[i + 1]);
+  }
+  const size = Math.max(maxX - minX, maxY - minY, 1);
+  const pad = size * padK;
+  return { box: `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`, sw: size * 0.07 };
+}
+
+/** 지도 좌표 경로를 위가 북쪽인 평면 path로(직접 그린 원래 그림이 없을 때 실제 코스 모양으로 대신 그린다) */
+function routeToPath(route: LatLng[]) {
+  const k = Math.cos(((route[0]?.[0] ?? 37.5) * Math.PI) / 180);
+  return route.map((p, i) => `${i ? 'L' : 'M'}${(p[1] * k * 1e5).toFixed(1)} ${(-p[0] * 1e5).toFixed(1)}`).join(' ');
+}
+
+/**
+ * 그림 아이콘(라이브러리·도감·작은 썸네일).
+ * 직접 그린 코스(shape="custom")는 path(사용자가 그린 원래 그림)나 route(실제 코스)를 넘기면 그 모양을 그린다.
+ */
 export function ShapeGlyph({
   shape,
   w,
@@ -185,6 +242,8 @@ export function ShapeGlyph({
   dash,
   bg,
   radius,
+  path,
+  route,
 }: {
   shape: string;
   w: number | string;
@@ -194,11 +253,22 @@ export function ShapeGlyph({
   dash?: string;
   bg?: string;
   radius?: number;
+  path?: string | null;
+  route?: LatLng[] | null;
 }) {
-  const ic = SHAPE_ICONS[shape] ?? SHAPE_ICONS.custom;
+  const known = shape !== 'custom' ? SHAPE_ICONS[shape] : undefined;
+  const own = useMemo(() => {
+    if (known) return null;
+    const d = path || (route && route.length > 1 ? routeToPath(route) : null);
+    const b = d ? pathBox(d) : null;
+    return d && b ? { d, box: b.box, sw: b.sw } : null;
+  }, [known, path, route]);
+  const ic = known ?? own ?? SHAPE_ICONS.custom;
+  // 기본 아이콘 굵기(viewBox 기준)를 넘긴 sw와 같은 비율로 맞춘다
+  const width = own ? (sw ? (own.sw * sw) / 14 : own.sw) : (sw ?? ic.sw);
   return (
     <Svg width={w as any} height={h} viewBox={ic.box} style={bg ? { backgroundColor: bg, borderRadius: radius ?? 14 } : undefined}>
-      <Path d={ic.d} fill="none" stroke={color} strokeWidth={sw ?? ic.sw} strokeDasharray={dash} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={ic.d} fill="none" stroke={color} strokeWidth={width} strokeDasharray={dash} strokeLinejoin="round" strokeLinecap="round" />
     </Svg>
   );
 }

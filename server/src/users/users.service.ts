@@ -21,7 +21,7 @@ export class UsersService {
 
   async me(userId: number) {
     const u = await this.db.one(
-      `SELECT u.id, u.display_name, u.email, u.auth_provider, u.profile_image_url, s.*
+      `SELECT u.id, u.display_name, u.email, u.auth_provider, u.profile_image_url, u.email_verified_at, s.*
        FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1 AND u.deleted_at IS NULL`,
       [userId],
     );
@@ -37,6 +37,7 @@ export class UsersService {
       name: u.display_name,
       email: u.email,
       provider: u.auth_provider,
+      emailVerified: !!u.email_verified_at,
       hasPhoto: !!u.profile_image_url,
       photoUrl: (u.profile_image_url as string | null) ?? null,
       settings: {

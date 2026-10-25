@@ -10,13 +10,17 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "화면이 꺼져도 러닝 경로가 끊기지 않게, 러닝을 기록하는 동안에만 위치를 사용해요.",
+        "UIBackgroundModes": [
+          "location"
+        ]
       },
       "bundleIdentifier": "com.travity.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#A3E635",
+        "backgroundColor": "#A8E923",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -26,7 +30,10 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ],
       "package": "com.travity.app"
     },
@@ -41,7 +48,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요."
+          "locationWhenInUsePermission": "러닝을 기록하는 동안 달린 경로를 그리기 위해 위치를 사용해요.",
+          "locationAlwaysAndWhenInUsePermission": "화면이 꺼져도 러닝 경로가 끊기지 않게, 러닝을 기록하는 동안에만 위치를 사용해요.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-font",
@@ -52,7 +63,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 160,
           "resizeMode": "contain",
-          "backgroundColor": "#A3E635"
+          "backgroundColor": "#A8E923"
         }
       ],
       "expo-sharing",
@@ -68,7 +79,9 @@
         "expo-media-library",
         {
           "savePhotosPermission": "작품 이미지를 사진첩에 저장하기 위해 사용해요.",
-          "granularPermissions": ["photo"]
+          "granularPermissions": [
+            "photo"
+          ]
         }
       ]
     ],

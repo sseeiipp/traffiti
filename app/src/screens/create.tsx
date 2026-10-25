@@ -12,9 +12,10 @@ import {
   View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { api } from "../api/client";
+import { api, API_URL } from "../api/client";
 import {
   useAction,
+  useBlockedRoads,
   useChallenge,
   useCrew,
   useCurrentCrewId,
@@ -22,7 +23,7 @@ import {
   useUnit,
 } from "../api/hooks";
 import { KakaoDrawMap, type DrawMapControl, type MapView } from "../map/KakaoMap";
-import { MapBackdrop, RouteArt, ShapeGlyph, type LatLng } from "../map/MapArt";
+import { blockedAround, MapBackdrop, RouteArt, ShapeGlyph, type LatLng } from "../map/MapArt";
 import { myLocation } from "../map/myLocation";
 import { FRIEND_SHAPES, SHAPE_ICONS, shapeLabel } from "../map/shapes";
 import type { P } from "../navigation/types";
@@ -70,6 +71,7 @@ import {
 import { fmtKm, kmParts, md, Measure, pct } from "./common";
 
 type Pt = [number, number];
+type Place = { name: string; address: string; lat: number; lng: number };
 
 /** 지도 좌표 선들의 실제 길이(km) */
 function geoLength(geo: LatLng[][]) {
@@ -253,12 +255,19 @@ interface ShapeInfo {
   km: number;
   difficulty: string;
   library: boolean;
+  /** 동물·모양·사물·글자·겨울 한정 */
+  category?: string;
+  /** 도로망 테스트에서 경로가 잘 나온 시연 추천 그림 */
+  pick?: boolean;
 }
+
+const LIB_GROUPS = ["추천", "전체", "동물", "모양", "사물", "글자", "겨울 한정"] as const;
 
 export function CourseSelect({ navigation }: P<"CourseSelect">) {
   const unit = useUnit();
   const draft = useDraft();
   const [range, setRange] = useState<"all" | "short" | "long">("all");
+  const [group, setGroup] = useState<(typeof LIB_GROUPS)[number]>("전체");
   // 그림 라이브러리 경로도 지금 위치에서 출발한다
   useEffect(() => {
     if (isDefaultStart(useDraft.getState().startLabel)) hereAsStart(draft.set);
@@ -269,10 +278,15 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
     queryFn: () => api<ShapeInfo[]>("/shapes"),
   });
   const list = (shapes.data ?? [])
-    .filter((s) => s.library)
+    .filter((s) => s.library && SHAPE_ICONS[s.key])
+    .filter((s) =>
+      group === "전체" ? true : group === "추천" ? s.pick : s.category === group,
+    )
     .filter((s) =>
       range === "all" ? true : range === "short" ? s.km < 5 : s.km >= 5,
-    );
+    )
+    // 추천 그림을 앞으로
+    .sort((a, b) => Number(!!b.pick) - Number(!!a.pick));
   const sel = shapes.data?.find((s) => s.key === draft.shapeKey);
   return (
     <Screen
@@ -290,10 +304,20 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
         title="그림 라이브러리"
         step="2 / 4"
       />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginHorizontal: -20, flexGrow: 0 }}
+        contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingVertical: 4 }}
+      >
+        {LIB_GROUPS.map((g) => (
+          <Chip key={g} label={g} on={group === g} onPress={() => setGroup(g)} />
+        ))}
+      </ScrollView>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {(
           [
-            ["all", "전체"],
+            ["all", "전체 거리"],
             ["short", "5km 미만"],
             ["long", "5km 이상"],
           ] as const
@@ -307,13 +331,18 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
         ))}
       </View>
       {shapes.isLoading ? <Loading /> : null}
+      {!shapes.isLoading && !list.length ? (
+        <T size={14} color={C.sub}>
+          이 조건에 맞는 그림이 없어요. 다른 묶음이나 거리를 골라 주세요.
+        </T>
+      ) : null}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         {list.map((s) => {
           const on = s.key === draft.shapeKey;
           return (
             <Tap
               key={s.key}
-              onPress={() => draft.set({ shapeKey: s.key, km: null })}
+              onPress={() => draft.set({ shapeKey: s.key, km: null, customPath: null, mode: "library" })}
               style={{ width: "47%", flexGrow: 1 }}
             >
               <Glass
@@ -333,7 +362,7 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
                   shape={s.key}
                   w="100%"
                   h={118}
-                  sw={SHAPE_ICONS[s.key].sw * 0.55}
+                  sw={(SHAPE_ICONS[s.key]?.sw ?? 5) * 0.55}
                   bg={C.map.land}
                 />
                 <View
@@ -346,9 +375,18 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
                       justifyContent: "space-between",
                     }}
                   >
-                    <T size={15} weight="600">
-                      {s.label}
-                    </T>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
+                      <T size={15} weight="600" numberOfLines={1}>
+                        {s.label}
+                      </T>
+                      {s.pick ? (
+                        <View style={{ paddingHorizontal: 6, height: 18, borderRadius: 9, backgroundColor: C.limeSoft, justifyContent: "center" }}>
+                          <T size={10} weight="700" color={C.limeText}>
+                            추천
+                          </T>
+                        </View>
+                      ) : null}
+                    </View>
                     {on ? (
                       <View
                         style={{
@@ -483,6 +521,9 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   const problem = path ? drawingProblem(strokes) : null;
   // 그리는 중에도 두 손가락으로 지도를 옮긴다. 확대·축소는 막는다
   const map = useRef<DrawMapControl | null>(null);
+  // 못 가는 길(보도 없는 큰 길 등)을 빨간 선으로 보여 줘서 그 위로 그리지 않게 한다
+  const allBlocked = useBlockedRoads();
+  const blocked = useMemo(() => blockedAround(allBlocked.data, [center], 0.03), [allBlocked.data, center[0], center[1]]);
   return (
     <View
       style={{ flex: 1, backgroundColor: C.map.land }}
@@ -502,6 +543,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           zoomable={false}
           me={here}
           control={map}
+          blocked={blocked}
           onView={setView}
           fallback={
             <Svg width={size.w} height={size.h}>
@@ -543,6 +585,16 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
         }}
       >
         <RoundBtn onPress={() => navigation.goBack()} />
+        {blocked.length ? (
+          <Glass style={{ height: 32, paddingHorizontal: 10, borderRadius: 16, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Svg width={18} height={6}>
+              <Path d="M1 3h16" stroke={C.blocked} strokeWidth={3.5} strokeLinecap="round" />
+            </Svg>
+            <T size={12} weight="500">
+              못 가는 길
+            </T>
+          </Glass>
+        ) : null}
         <Glass
           style={{
             marginLeft: "auto",
@@ -690,7 +742,7 @@ export function Sketchbook({ navigation }: P<"Sketchbook">) {
           color={C.sub}
           style={{ position: "absolute", left: 16, top: 14 }}
         >
-          한 붓으로, 끝을 시작점에 이어 그려요
+          한 붓으로 그려요. 시작점으로 돌아오지 않아도 돼요
         </T>
         <View
           style={{
@@ -798,6 +850,7 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [found, setFound] = useState<Place[]>([]);
   // 지도는 손가락으로 옮기고 확대한다. 그림 틀은 화면에 고정되고, 틀 아래 지도가 달릴 곳이 된다
   const [center, setCenter] = useState<LatLng>(draft.start);
   const [view, setView] = useState<MapView | null>(null);
@@ -880,15 +933,21 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
     if (!k) return;
     setSearching(true);
     setNotFound(false);
+    setFound([]);
     try {
       const spot = START_SPOTS.find(
         (s) => s.label.includes(k) || s.area.includes(k),
       );
-      const [g] = spot
-        ? [{ latitude: spot.pos[0], longitude: spot.pos[1] }]
-        : await Location.geocodeAsync(k).catch(() => []);
-      if (g) putPinAt([g.latitude, g.longitude]);
-      else setNotFound(true);
+      if (spot) return putPinAt(spot.pos);
+      // 휴대폰 지오코더는 한국 장소 이름을 잘 못 찾아서 서버(카카오 로컬·OSM)에 먼저 묻는다
+      let list = await api<Place[]>(`/places?q=${encodeURIComponent(k)}`).catch(() => [] as Place[]);
+      if (!list.length) {
+        const g = await Location.geocodeAsync(k).catch(() => []);
+        list = g.map((x) => ({ name: k, address: "", lat: x.latitude, lng: x.longitude }));
+      }
+      if (!list.length) setNotFound(true);
+      else if (list.length === 1) putPinAt([list[0].lat, list[0].lng]);
+      else setFound(list.slice(0, 5));
     } finally {
       setSearching(false);
     }
@@ -1011,6 +1070,7 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
             onChangeText={(t) => {
               setQ(t);
               setNotFound(false);
+              setFound([]);
             }}
             onSubmitEditing={search}
             returnKeyType="search"
@@ -1023,6 +1083,39 @@ export function AreaPick({ navigation }: P<"AreaPick">) {
           />
         </Glass>
       </View>
+      {found.length ? (
+        <Glass
+          style={{
+            position: "absolute",
+            left: 76,
+            right: 16,
+            top: top + 56,
+            borderRadius: 16,
+            paddingVertical: 4,
+          }}
+        >
+          {found.map((p, i) => (
+            <Tap
+              key={`${p.lat},${p.lng},${i}`}
+              onPress={() => {
+                setFound([]);
+                setQ(p.name);
+                putPinAt([p.lat, p.lng]);
+              }}
+              style={{ paddingHorizontal: 14, paddingVertical: 9, gap: 2 }}
+            >
+              <T size={14} weight="600" numberOfLines={1}>
+                {p.name}
+              </T>
+              {p.address ? (
+                <T size={12} color={C.sub} numberOfLines={1}>
+                  {p.address}
+                </T>
+              ) : null}
+            </Tap>
+          ))}
+        </Glass>
+      ) : null}
       {notFound ? (
         <Glass
           style={{
@@ -1287,17 +1380,21 @@ interface Suggestion {
   notes?: string[];
   /** 도로에 맞추기 전 원래 그림 선. 제안 경로 아래에 빨간 점선으로 겹친다 */
   target?: LatLng[] | null;
+  /** 경로가 못 가는 길을 따라가는 곳. 빨간 실선으로 덧그린다 */
+  blocked?: LatLng[][];
 }
 
 export function RouteReview({ navigation }: P<"RouteReview">) {
   const unit = useUnit();
   const draft = useDraft();
   const top = useTop();
-  // 다시 그리기: 직접 그린 그림은 그린 화면(스케치북·지도 위)으로, 고른 그림은 그림 고르기로 돌아간다
+  // 다시 그리기: 직접 그린 그림은 그린 화면(스케치북·지도 위)으로, 고른 그림은 그림 고르기로 돌아간다.
+  // navigate는 같은 화면을 스택에 또 쌓아서(React Navigation 7) 그리기·수정을 반복하면 뒤로 가기가 지난 그림들로 계속 돌아간다.
+  // popTo로 스택에 있던 그 화면까지 되돌아가 그린 그림을 그대로 이어서 고친다
   const redraw = () =>
     draft.customPath
-      ? navigation.navigate(draft.mode === "sketch" ? "Sketchbook" : "DrawMap")
-      : navigation.navigate("CourseSelect");
+      ? navigation.popTo(draft.mode === "sketch" ? "Sketchbook" : "DrawMap")
+      : navigation.popTo("CourseSelect");
   const body = {
     shapeKey: draft.shapeKey ?? undefined,
     customPath: draft.customPath ?? undefined,
@@ -1335,6 +1432,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
           <RouteArt
             route={s.route}
             target={s.target}
+            blocked={s.blocked}
             w={W}
             h={H}
             pad={32}
@@ -1348,7 +1446,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
         ) : (
           // 경로를 찾는 중이거나 못 찾았을 때도 출발 지점 주변 실제 지도를 보여 준다
           <RouteArt
-            route={[draft.start, draft.start]}
+            route={s?.target && s.target.length > 1 ? s.target : [draft.start, draft.start]}
             w={W}
             h={H}
             insetTop={top + 48}
@@ -1402,6 +1500,14 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
           </Svg>
           <T size={12} weight="500">
             제안 경로
+          </T>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Svg width={18} height={6}>
+            <Path d="M1 3h16" stroke={C.blocked} strokeWidth={3.5} strokeLinecap="round" />
+          </Svg>
+          <T size={12} weight="500">
+            못 가는 길
           </T>
         </View>
       </Glass>
@@ -1550,8 +1656,8 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
                     a.includes("다시 그리") || a.includes("다른 그림")
                       ? redraw()
                       : i === 2 || a.includes("다른 그림")
-                        ? navigation.navigate("CourseSelect")
-                        : navigation.navigate("AreaPick")
+                        ? navigation.popTo("CourseSelect")
+                        : navigation.popTo("AreaPick")
                   }
                 >
                   <Glass
@@ -1660,7 +1766,7 @@ export function ChallengeShare({ navigation }: P<"ChallengeShare">) {
               onPress={async () => {
                 if (crew.data?.invite)
                   await Clipboard.setStringAsync(
-                    `[앱 링크]/${crew.data.invite.code}`,
+                    `${API_URL}/c/${crew.data.invite.code}`,
                   );
                 setCopied(true);
               }}
@@ -1837,7 +1943,7 @@ export function ChallengeShare({ navigation }: P<"ChallengeShare">) {
 
 // ---------- 13-1 친구와 달리기 ----------
 
-const FRIEND_LINK = (code: string) => `https://example.com/f/${code}`; // 실제 앱 링크는 아직 미정(기획서)
+const FRIEND_LINK = (code: string) => `${API_URL}/f/${code}`; // 앱이 있으면 앱으로, 없으면 웹 초대 페이지
 
 export function FriendRun({ navigation }: P<"FriendRun">) {
   const unit = useUnit();

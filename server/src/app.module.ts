@@ -15,10 +15,12 @@ import { PeopleController } from './users/people.controller.js';
 import { UsersService } from './users/users.service.js';
 import { HealthController } from './health.controller.js';
 import { ImagesController } from './images/images.controller.js';
+import { ShareController } from './share/share.controller.js';
+import { PlacesController } from './geo/places.controller.js';
 
 @Module({
   imports: [ScheduleModule.forRoot(), DbModule, AuthModule],
-  controllers: [HealthController, ImagesController, UsersController, PeopleController, CrewsController, ChallengesController, RunsController, RankingsController],
+  controllers: [HealthController, ImagesController, UsersController, PeopleController, CrewsController, ChallengesController, RunsController, RankingsController, ShareController, PlacesController],
   providers: [UsersService, CrewsService, ChallengesService, RunsService, RankingsService],
 })
 export class AppModule {}

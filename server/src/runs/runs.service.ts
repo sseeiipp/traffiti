@@ -172,7 +172,7 @@ export class RunsService {
   async summary(userId: number, runId: number, db = this.db.pool as any) {
     const run = await this.db.one(
       `SELECT r.*, ch.title AS challenge_title, ch.shape_key, ch.status AS challenge_status, ch.created_by AS challenge_creator,
-              ch.category, ch.crew_id AS ch_crew, ch.route_points, ch.progress AS challenge_progress
+              ch.category, ch.crew_id AS ch_crew, ch.route_points, ch.custom_path, ch.progress AS challenge_progress
        FROM runs r LEFT JOIN challenges ch ON ch.id = r.challenge_id WHERE r.id = $1`,
       [runId],
       db,
@@ -195,6 +195,7 @@ export class RunsService {
             id: run.challenge_id,
             title: run.challenge_title,
             shapeKey: run.shape_key,
+            customPath: run.custom_path ?? null,
             shapeLabel: shapeByKey(run.shape_key)?.label ?? run.category ?? '직접 그린 코스',
             status: run.challenge_status,
             isFriend: !run.ch_crew,
@@ -207,6 +208,32 @@ export class RunsService {
           }
         : null,
     };
+  }
+
+  /**
+   * 러닝 기록 삭제(본인만). GPS 점까지 지운다.
+   * 진행 중인 챌린지에 반영된 러닝이면 이 러닝이 채운 구간과 거리 XP를 되돌리고 진행률을 다시 계산한다.
+   * 이미 끝난 작품은 그림이 바뀌지 않게 구간은 그대로 두고(기록 연결만 끊긴다) 러닝만 지운다.
+   */
+  async remove(userId: number, runId: number) {
+    await this.own(userId, runId);
+    return this.db.tx(async (c) => {
+      const run = await this.db.one(`SELECT * FROM runs WHERE id = $1 FOR UPDATE`, [runId], c);
+      if (!run) throw new NotFoundException('기록을 찾을 수 없어요.');
+      let progress: number | null = null;
+      if (run.challenge_id) {
+        const ch = await this.db.one(`SELECT id, status, route_points FROM challenges WHERE id = $1 FOR UPDATE`, [run.challenge_id], c);
+        if (ch && ch.status === 'active') {
+          await c.query(`DELETE FROM challenge_coverage WHERE challenge_id = $1 AND run_id = $2`, [ch.id, runId]);
+          await c.query(`DELETE FROM crew_xp_transactions WHERE source_type = 'run_km' AND source_id = $1`, [String(runId)]);
+          const n = await this.db.one<{ n: number }>(`SELECT count(*)::int AS n FROM challenge_coverage WHERE challenge_id = $1`, [ch.id], c);
+          progress = n!.n / Math.max(1, ch.route_points.length - 1);
+          await c.query(`UPDATE challenges SET progress = $2 WHERE id = $1`, [ch.id, progress]);
+        }
+      }
+      await c.query(`DELETE FROM runs WHERE id = $1`, [runId]);
+      return { ok: true, challengeId: run.challenge_id ?? null, progress };
+    });
   }
 
   /** 기록 상세. 상세 GPS는 본인만 받는다. */

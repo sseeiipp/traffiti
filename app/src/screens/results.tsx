@@ -10,7 +10,7 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, TextInput, View, Platform } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
-import { api } from '../api/client';
+import { api, API_URL } from '../api/client';
 import {
   monthKey,
   useAction,
@@ -25,10 +25,12 @@ import {
   useRankings,
   useUnit,
   type Challenge,
+  type CollectionItem,
 } from '../api/hooks';
 import { RouteArt, ShapeGlyph } from '../map/MapArt';
 import { SHAPE_ICONS } from '../map/shapes';
 import type { P, Stack, Tabs } from '../navigation/types';
+import { useDraft } from '../store/draft';
 import { C, font, shadow } from '../theme';
 import { IcChevron, IcClear, IcDown, IcDownload, IcLink, IcMore, IcSearch, IcShare } from '../ui/icons';
 import {
@@ -1011,7 +1013,7 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
   if (s.names) parts.push(c.contributors.map((x) => x.name).join(' · '));
   if (s.exact) parts.push(`${c.startLabel} 출발`);
   const caption = parts.length ? parts.join(' · ') : '트래피티로 함께 그린 작품';
-  const link = `https://example.com/a/${c.id}`; // 앱 링크 미정(기획서)
+  const link = `${API_URL}/a/${c.id}`; // 공개 작품이면 웹에서도 보인다
   const defs: [string, string, string][] = [
     ['map', '지도 배경', '도로 모양만, 지명 없이'],
     ['names', '크루원 이름', '색깔별 참여자 표시'],
@@ -1105,11 +1107,25 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
 // ---------- 22-1 그림 도감 ----------
 
 export function ShapeBook({ navigation }: P<'ShapeBook'>) {
+  const unit = useUnit();
   const crewId = useCurrentCrewId();
   const crews = useMyCrews();
   const book = useCollection(crewId);
+  const draft = useDraft();
+  const [view, setView] = useState<'all' | 'got'>('all');
+  const [open, setOpen] = useState<CollectionItem | null>(null);
   if (!book.data) return <Loading />;
   const name = crews.data?.crews.find((c) => c.id === crewId)?.name ?? '';
+  const sets = book.data.sets
+    .map((s) => ({ ...s, items: view === 'got' ? s.items.filter((i) => i.state === 'got' || i.state === 'half') : s.items }))
+    .filter((s) => s.items.length);
+  // 도감에서 고른 그림으로 바로 새 챌린지를 만든다(그림 라이브러리에서 고른 상태로 연다)
+  const start = (key: string) => {
+    setOpen(null);
+    draft.reset();
+    draft.set({ shapeKey: key, mode: 'library', km: null });
+    navigation.navigate('CourseSelect');
+  };
   return (
     <Screen gap={12}>
       <NavBar onBack={() => navigation.goBack()} />
@@ -1128,9 +1144,25 @@ export function ShapeBook({ navigation }: P<'ShapeBook'>) {
         </T>
       </View>
       <View style={{ height: 8, borderRadius: 4, backgroundColor: C.seg, overflow: 'hidden' }}>
-        <View style={{ width: `${(book.data.got / book.data.total) * 100}%`, height: 8, borderRadius: 4, backgroundColor: C.limeEdge }} />
+        <View style={{ width: `${(book.data.got / Math.max(1, book.data.total)) * 100}%`, height: 8, borderRadius: 4, backgroundColor: C.limeEdge }} />
       </View>
-      {book.data.sets.map((s) => (
+      <Segmented
+        small
+        items={[
+          { key: 'all', label: '전체 그림' },
+          { key: 'got', label: '모은 그림' },
+        ]}
+        value={view}
+        onChange={setView}
+      />
+      {!sets.length ? (
+        <Glass style={{ borderRadius: 20, padding: 18 }}>
+          <T size={14} color={C.sub} lh={1.5}>
+            아직 모은 그림이 없어요. 챌린지를 80% 넘게 채우면 도감에 모여요.
+          </T>
+        </Glass>
+      ) : null}
+      {sets.map((s) => (
         <View key={s.name} style={{ gap: 8, marginTop: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 2 }}>
             <T size={17} weight="700">
@@ -1144,39 +1176,90 @@ export function ShapeBook({ navigation }: P<'ShapeBook'>) {
             </T>
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {s.items.map((it) => {
+            {s.items.map((it, i) => {
               const got = it.state === 'got';
               const half = it.state === 'half';
+              const locked = it.state === 'locked';
               const sw = SHAPE_ICONS[it.key]?.sw ?? 5;
               return (
-                <View
-                  key={it.key}
-                  style={{
-                    width: '22.5%',
-                    flexGrow: 1,
-                    maxWidth: '25%',
-                    height: 88,
-                    borderRadius: 18,
-                    paddingTop: 10,
-                    paddingHorizontal: 6,
-                    paddingBottom: 8,
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: got ? 'rgba(163, 230, 53, 0.28)' : C.soft,
-                    boxShadow: got ? '0 4px 12px rgba(63, 98, 18, 0.12)' : undefined,
-                    opacity: it.state === 'locked' ? 0.6 : 1,
-                  }}
+                <Tap
+                  key={`${it.key}-${it.label}-${i}`}
+                  label={locked ? '잠긴 그림' : it.label}
+                  disabled={locked}
+                  onPress={() => setOpen(it)}
+                  style={{ width: '22.5%', flexGrow: 1, maxWidth: '25%' }}
                 >
-                  <ShapeGlyph shape={it.key} w="100%" h={44} color={got ? C.limeText : half ? C.limeEdge : '#C7C7CC'} dash={got || half ? undefined : `${sw} ${sw * 1.6}`} />
-                  <T size={12} weight={got ? '600' : '500'} color={got ? C.ink : half ? C.limeText : C.sub2}>
-                    {it.label}
-                  </T>
-                </View>
+                  <View
+                    style={{
+                      height: 88,
+                      borderRadius: 18,
+                      paddingTop: 10,
+                      paddingHorizontal: 6,
+                      paddingBottom: 8,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: got ? 'rgba(163, 230, 53, 0.28)' : C.soft,
+                      boxShadow: got ? '0 4px 12px rgba(63, 98, 18, 0.12)' : undefined,
+                      opacity: locked ? 0.6 : 1,
+                    }}
+                  >
+                    {locked ? (
+                      <T size={26} weight="700" color="#C7C7CC" style={{ lineHeight: 44 }}>
+                        ?
+                      </T>
+                    ) : (
+                      <ShapeGlyph
+                        shape={it.key}
+                        path={it.path}
+                        w="100%"
+                        h={44}
+                        color={got ? C.limeText : half ? C.limeEdge : '#C7C7CC'}
+                        dash={got || half ? undefined : `${sw} ${sw * 1.6}`}
+                      />
+                    )}
+                    <T size={12} weight={got ? '600' : '500'} color={got ? C.ink : half ? C.limeText : C.sub2} numberOfLines={1}>
+                      {it.label}
+                    </T>
+                  </View>
+                </Tap>
               );
             })}
           </View>
         </View>
       ))}
+      <Sheet open={!!open} onClose={() => setOpen(null)}>
+        {open ? (
+          <View style={{ gap: 14 }}>
+            <View style={{ height: 180, borderRadius: 20, backgroundColor: open.state === 'got' ? 'rgba(163, 230, 53, 0.22)' : C.soft, padding: 18 }}>
+              <ShapeGlyph shape={open.key} path={open.path} w="100%" h={144} color={open.state === 'none' ? C.sub3 : open.state === 'got' ? C.limeText : C.limeEdge} />
+            </View>
+            <View style={{ gap: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <T size={22} weight="700">
+                  {open.label}
+                </T>
+                <Pill
+                  label={open.state === 'got' ? '모음' : open.state === 'half' ? `${pct(open.progress ?? 0)} 채움` : '아직 없음'}
+                  bg={open.state === 'got' ? C.lime : C.seg}
+                />
+              </View>
+              <T size={14} color={C.sub} lh={1.5}>
+                {open.state === 'got'
+                  ? '크루가 함께 완성한 그림이에요.'
+                  : open.state === 'half'
+                    ? '80% 넘게 채우면 도감에 모여요. 다시 도전해 보세요.'
+                    : open.key === 'custom'
+                      ? '직접 그린 그림이에요.'
+                      : `${fmtKm(open.km ?? 0, unit)} 코스로 달리면 도감에 모을 수 있어요.`}
+              </T>
+            </View>
+            {open.key !== 'custom' && SHAPE_ICONS[open.key] ? (
+              <Btn title="이 그림으로 챌린지 만들기" onPress={() => start(open.key)} />
+            ) : null}
+            <Btn title="닫기" kind="secondary" onPress={() => setOpen(null)} />
+          </View>
+        ) : null}
+      </Sheet>
     </Screen>
   );
 }

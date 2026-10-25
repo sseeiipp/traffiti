@@ -59,6 +59,7 @@ export function MySettings({ navigation }: P<'MySettings'>) {
   const me = useMe();
   const crews = useMyCrews();
   const logout = useAuth((s) => s.logout);
+  const demoGps = useAuth((s) => s.demoGps);
   const [s, save] = useSettings(me.data);
   const [perm, setPerm] = useState('확인 중');
   useEffect(() => {
@@ -123,6 +124,10 @@ export function MySettings({ navigation }: P<'MySettings'>) {
               onChange={(v) => save({ distanceUnit: v })}
             />
           }
+        />
+        <Row
+          label="시연 모드(가짜 GPS)"
+          right={<Toggle on={demoGps} onChange={(v) => useAuth.getState().set({ demoGps: v })} label="시연 모드" />}
         />
       </Group>
 

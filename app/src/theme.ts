@@ -22,6 +22,8 @@ export const C = {
   line: '#E5E5EA',
   danger: '#D92D20',
   target: '#C7330A',
+  /** 못 가는 길(보도 없는 큰 길·자동차 전용 도로) */
+  blocked: '#E5241B',
   map: { land: '#EEF1EA', water: '#D3E2E8', park: '#D9EDC2', road: '#FFFFFF', minor: '#F7F8F5' },
   members: ['#2B63F0', '#F26B1D', '#0E9384', '#7A5AF8'],
 };

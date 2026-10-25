@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, View } from 'react-native';
-import { api } from '../api/client';
+import { api, API_URL } from '../api/client';
 import { usePhotoPicker } from '../api/photo';
 import { useAction, useArtworks, useCrew, useCurrentCrewId, useUnit, type CrewDetail } from '../api/hooks';
 import { RouteArt, ShapeGlyph } from '../map/MapArt';
@@ -105,7 +105,7 @@ export function CrewManage({ navigation, route }: P<'CrewManage'>) {
         <Tap onPress={() => navigation.navigate('ChallengeJoin', { challengeId: a.id })}>
           <Glass kind="lime" style={{ borderRadius: 20, paddingVertical: 8, paddingLeft: 8, paddingRight: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ width: 56, height: 44, borderRadius: 12, backgroundColor: '#FFFFFF', padding: 4 }}>
-              <ShapeGlyph shape={a.shapeKey} w={48} h={36} />
+              <ShapeGlyph shape={a.shapeKey} path={a.customPath} w={48} h={36} />
             </View>
             <View style={{ flex: 1, gap: 1 }}>
               <T size={12} weight="600" color={C.limeDeep}>
@@ -409,7 +409,7 @@ export function CrewInvite({ navigation, route }: P<'CrewInvite'>) {
   const inv = crew.data.invite;
   const code = inv?.code ?? '------';
   const days = inv ? Math.max(0, Math.ceil((new Date(inv.expiresAt).getTime() - Date.now()) / 86_400_000)) : 7;
-  const link = `[앱 링크]/${code}`; // 앱 링크 미정(기획서)
+  const link = `${API_URL}/c/${code}`; // 앱이 있으면 앱으로, 없으면 웹 초대 페이지
   const approve = crew.data.joinPolicy === 'approve';
   return (
     <Screen

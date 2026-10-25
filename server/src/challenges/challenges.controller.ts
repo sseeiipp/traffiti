@@ -9,6 +9,11 @@ import { ChallengesService, type RouteInput } from './challenges.service.js';
 export class ChallengesController {
   constructor(private readonly ch: ChallengesService) {}
 
+  @Get('blocked')
+  blocked(@Query() q: { minLat?: string; minLng?: string; maxLat?: string; maxLng?: string }) {
+    return this.ch.blocked(q);
+  }
+
   @Get('shapes')
   shapes() {
     return this.ch.library();
@@ -28,6 +33,11 @@ export class ChallengesController {
   @Get('crews/:crewId/challenges/current')
   current(@CurrentUser() u: AuthUser, @Param('crewId', ParseIntPipe) crewId: number) {
     return this.ch.current(u.id, crewId);
+  }
+
+  @Get('crews/:crewId/challenges/active')
+  active(@CurrentUser() u: AuthUser, @Param('crewId', ParseIntPipe) crewId: number) {
+    return this.ch.activeList(u.id, crewId);
   }
 
   @Get('challenges/:id')
