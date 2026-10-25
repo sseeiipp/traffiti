@@ -76,6 +76,8 @@ export interface RouteArtProps {
   mode?: 'progress' | 'route' | 'target' | 'faded';
   stroke?: number;
   map?: boolean;
+  /** 카카오맵 대신 단순화한 SVG 지도로 그린다(이미지로 저장할 때. WebView는 캡처되지 않는다) */
+  svgOnly?: boolean;
   bg?: string;
   seed?: number;
   /** 현재 위치(내 색 점) */
@@ -95,7 +97,7 @@ export interface RouteArtProps {
 /** 지도 바탕이 필요하면 카카오맵, 키가 없거나 불러오지 못하면 단순화한 SVG 지도 */
 export function RouteArt(props: RouteArtProps) {
   const svg = <SvgRouteArt {...props} />;
-  if (props.map === false || !KAKAO_JS_KEY || !props.route.length) return svg;
+  if (props.map === false || props.svgOnly || !KAKAO_JS_KEY || !props.route.length) return svg;
   return <KakaoRouteMap {...props} fallback={svg} />;
 }
 

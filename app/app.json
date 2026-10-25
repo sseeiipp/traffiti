@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#A3E635",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -45,7 +45,24 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#A3E635"
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "작품 이미지를 사진첩에 저장하기 위해 사용해요.",
+          "granularPermissions": ["photo"]
+        }
+      ]
     ],
     "scheme": "travity",
     "extra": {

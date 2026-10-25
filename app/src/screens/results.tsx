@@ -4,8 +4,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, TextInput, View, Platform } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { api } from '../api/client';
 import {
@@ -895,7 +898,40 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
   const [t, setT] = useState<Record<string, boolean> | null>(null);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'share' | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const card = useRef<ComponentRef<typeof View>>(null);
   if (!ch.data || !me.data) return <Loading />;
+  // 미리보기 카드를 그대로 PNG로 찍는다(웹은 지원하지 않아 글로만 공유)
+  // view-shot 타입이 RN 0.88의 ReactNativeElement를 아직 모른다
+  const snap = () => captureRef(card as unknown as Parameters<typeof captureRef>[0], { format: 'png', quality: 1, result: 'tmpfile' });
+  const saveImage = async () => {
+    setErr(null);
+    setBusy('save');
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync(true);
+      if (!perm.granted) throw new Error('사진 저장 권한을 허용해 주세요.');
+      await MediaLibrary.saveToLibraryAsync(await snap());
+      setSaved(true);
+    } catch (e) {
+      setErr((e as Error).message || '이미지를 저장하지 못했어요.');
+    } finally {
+      setBusy(null);
+    }
+  };
+  const shareImage = async () => {
+    setErr(null);
+    const text = `${c.name} · ${caption}\n${link}`;
+    if (Platform.OS === 'web' || !(await Sharing.isAvailableAsync())) return Share.share({ message: text }).catch(() => {});
+    setBusy('share');
+    try {
+      await Sharing.shareAsync(await snap(), { mimeType: 'image/png', dialogTitle: c.name, UTI: 'public.png' });
+    } catch {
+      await Share.share({ message: text }).catch(() => {});
+    } finally {
+      setBusy(null);
+    }
+  };
   const s = t ?? { map: true, names: true, date: true, exact: !me.data.settings.hideStartOnShare };
   const c = ch.data;
   const parts: string[] = [];
@@ -936,9 +972,10 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
           </T>
           <RoundBtn kind="close" onPress={() => navigation.goBack()} />
         </View>
-        <Glass style={{ alignSelf: 'center', width: 230, borderRadius: 20, padding: 12, gap: 8 }}>
+        {/* 캡처할 때 유리 흐림은 찍히지 않아 흰 바탕을 따로 깐다 */}
+        <View ref={card} collapsable={false} style={{ alignSelf: 'center', width: 230, borderRadius: 20, padding: 12, gap: 8, backgroundColor: '#FFFFFF', boxShadow: shadow.glass }}>
           <View style={{ borderRadius: 12, overflow: 'hidden', backgroundColor: s.map ? C.map.land : '#FFFFFF' }}>
-            <RouteArt route={c.route} segments={c.segments} w={206} h={138} pad={16} stroke={6} map={s.map} bg="#FFFFFF" hideRemaining />
+            <RouteArt route={c.route} segments={c.segments} w={206} h={138} pad={16} stroke={6} map={s.map} svgOnly bg="#FFFFFF" hideRemaining />
           </View>
           <View style={{ gap: 2, paddingHorizontal: 2 }}>
             <T size={15} weight="700">
@@ -948,7 +985,7 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
               {caption}
             </T>
           </View>
-        </Glass>
+        </View>
         <Glass style={{ borderRadius: 20, paddingVertical: 2, paddingHorizontal: 16 }}>
           {defs.map(([k, l, h]) => (
             <View key={k} style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -966,8 +1003,9 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
         </Glass>
         <View style={{ marginTop: 'auto', gap: 10 }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {/* 이미지 저장은 프로토타입 한계(문구만 바뀜) — 이미지 렌더링 라이브러리 연결 후 동작 */}
-            <Btn title={saved ? '저장했어요' : '이미지 저장'} kind="secondary" flex textSize={15} icon={<IcDownload />} onPress={() => setSaved(true)} />
+            {Platform.OS === 'web' ? null : (
+              <Btn title={saved ? '저장했어요' : '이미지 저장'} kind="secondary" flex textSize={15} icon={<IcDownload />} loading={busy === 'save'} onPress={saveImage} />
+            )}
             <Btn
               title={copied ? '복사했어요' : '링크 복사'}
               kind="secondary"
@@ -980,7 +1018,12 @@ export function ShareSheet({ navigation, route }: P<'ShareSheet'>) {
               }}
             />
           </View>
-          <Btn title="다른 앱으로 공유" icon={<IcShare size={18} w={2} />} onPress={() => Share.share({ message: `${c.name} · ${caption}\n${link}` }).catch(() => {})} />
+          {err ? (
+            <T size={13} color={C.danger} center>
+              {err}
+            </T>
+          ) : null}
+          <Btn title="다른 앱으로 공유" icon={<IcShare size={18} w={2} />} loading={busy === 'share'} onPress={shareImage} />
         </View>
       </Glass>
     </View>
