@@ -90,6 +90,16 @@ function geoToMeters(geo: LatLng[][]): Pt[][] {
   return geo.map((st) => st.map((p): Pt => [(p[1] - o[1]) * k, (o[0] - p[0]) * 110570]));
 }
 
+/** 출발 지점이 아직 기본값(성수)이면 위치 권한을 묻고 지금 위치로 바꾼다 */
+async function hereAsStart(set: (p: Partial<ReturnType<typeof useDraft.getState>>) => void) {
+  const pos = await myLocation(true);
+  if (!pos) return;
+  const [a] = await Location.reverseGeocodeAsync({ latitude: pos[0], longitude: pos[1] }).catch(() => []);
+  const area = a?.district ?? a?.subregion ?? a?.city;
+  set({ start: pos, startLabel: "내 위치", areaLabel: area ? `${area} 일대` : "내 주변" });
+}
+const isDefaultStart = (label: string) => label === START_SPOTS[0].label;
+
 // ---------- 07 챌린지 만들기 방식 선택 ----------
 
 export function CreateMethod({ navigation }: P<"CreateMethod">) {
@@ -248,6 +258,11 @@ export function CourseSelect({ navigation }: P<"CourseSelect">) {
   const unit = useUnit();
   const draft = useDraft();
   const [range, setRange] = useState<"all" | "short" | "long">("all");
+  // 그림 라이브러리 경로도 지금 위치에서 출발한다
+  useEffect(() => {
+    if (isDefaultStart(useDraft.getState().startLabel)) hereAsStart(draft.set);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const shapes = useQuery({
     queryKey: ["shapes"],
     queryFn: () => api<ShapeInfo[]>("/shapes"),
@@ -1254,7 +1269,14 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
     start: draft.start,
     km: draft.km ?? undefined,
   };
+  // 출발 지점이 아직 기본값이면 지금 위치를 먼저 받아 본 뒤에 경로를 찾는다
+  const [located, setLocated] = useState(!isDefaultStart(draft.startLabel));
+  useEffect(() => {
+    if (!located) hereAsStart(draft.set).finally(() => setLocated(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const q = useQuery({
+    enabled: located,
     queryKey: ["suggest", body],
     queryFn: async () => {
       // 찾는 과정을 잠깐 보여준다
@@ -1362,7 +1384,7 @@ export function RouteReview({ navigation }: P<"RouteReview">) {
             boxShadow: shadow.sheet,
           }}
         >
-          {q.isLoading ? (
+          {!located || q.isLoading ? (
             <View style={{ gap: 18 }}>
               <View style={{ gap: 4 }}>
                 <H1 size={26}>달릴 수 있는 길을 찾고 있어요</H1>
