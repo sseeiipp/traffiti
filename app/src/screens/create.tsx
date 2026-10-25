@@ -371,8 +371,8 @@ function Tools({
   withMove,
   white,
 }: {
-  tool: "pen" | "move";
-  setTool: (t: "pen" | "move") => void;
+  tool: "pen" | "eraser" | "move";
+  setTool: (t: "pen" | "eraser" | "move") => void;
   onUndo: () => void;
   onClear: () => void;
   withMove?: boolean;
@@ -405,7 +405,7 @@ function Tools({
       >
         <IcPen />
       </Tap>
-      <Tap label="지우개" onPress={onClear} style={btn(false)}>
+      <Tap label="지우개" onPress={() => setTool("eraser")} style={btn(tool === "eraser")}>
         <IcEraser />
       </Tap>
       <Tap label="되돌리기" onPress={onUndo} style={btn(false)}>
@@ -431,7 +431,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
   const top = useTop();
   const b = useBottom();
   const [strokes, setStrokes] = useState<Pt[][]>([]);
-  const [tool, setTool] = useState<"pen" | "move">("pen");
+  const [tool, setTool] = useState<"pen" | "eraser" | "move">("pen");
   const [size, setSize] = useState({ w: 390, h: 700 });
   // 지원 지역 상자(화면 안 비율) 안의 선 길이를 실제 거리로 환산: 상자 폭 ≈ 2.2km
   const box = { x: 22, y: 130, w: size.w - 44, h: 390 };
@@ -463,7 +463,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
           h={size.h}
           strokes={strokes}
           onChange={setStrokes}
-          enabled={tool === "pen"}
+          mode={tool === "pen" ? "draw" : tool === "eraser" ? "erase" : "off"}
           color={C.target}
         />
       </View>
@@ -583,7 +583,7 @@ export function DrawMap({ navigation }: P<"DrawMap">) {
 export function Sketchbook({ navigation }: P<"Sketchbook">) {
   const draft = useDraft();
   const [strokes, setStrokes] = useState<Pt[][]>([]);
-  const [tool, setTool] = useState<"pen" | "move">("pen");
+  const [tool, setTool] = useState<"pen" | "eraser" | "move">("pen");
   const path = strokesToShape(strokes);
   return (
     <Screen
@@ -619,7 +619,7 @@ export function Sketchbook({ navigation }: P<"Sketchbook">) {
               h={500}
               strokes={strokes}
               onChange={setStrokes}
-              enabled={tool === "pen"}
+              mode={tool === "pen" ? "draw" : tool === "eraser" ? "erase" : "off"}
             />
           )}
         </Measure>

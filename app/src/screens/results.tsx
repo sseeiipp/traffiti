@@ -160,7 +160,25 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
   const ch = useChallenge(cur.data ? null : lastId);
   const c = cur.data ?? ch.data ?? null;
   const crew = crews.data?.crews.find((x) => x.id === crewId);
-  if (!crew || cur.isLoading) return <Loading />;
+  const detail = useCrew(crewId);
+  if (crews.isLoading || (crew && cur.isLoading)) return <Loading />;
+  // '크루 없이 하기'로 들어온 사람: 크루를 만들거나 참여하는 길만 보여준다
+  if (!crew)
+    return (
+      <TabPage header={<H1 size={28}>크루</H1>}>
+        <Glass style={{ borderRadius: 20, padding: 18, gap: 12 }}>
+          <T size={17} weight="700">
+            아직 크루가 없어요
+          </T>
+          <Sub size={14}>크루를 만들거나 초대 코드로 참여하면 크루원과 함께 그린 작품이 여기에 모여요.</Sub>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Btn title="새 크루 만들기" kind="secondary" flex textSize={15} onPress={() => navigation.navigate('CrewSetup', { mode: 'create' })} />
+            <Btn title="초대 코드로 참여" flex textSize={15} onPress={() => navigation.navigate('CrewSetup', { mode: 'join' })} />
+          </View>
+        </Glass>
+      </TabPage>
+    );
+  const members = detail.data?.members ?? [];
   const title = !c
     ? ''
     : c.status === 'completed'
@@ -182,6 +200,44 @@ export function CrewResult({ navigation }: TabP<'CrewResult'>) {
         </View>
       }
     >
+      {/* 크루원: 탭을 열자마자 누가 함께하는지 먼저 보인다 */}
+      <Glass style={{ borderRadius: 20, paddingTop: 14, paddingBottom: 12, gap: 10 }}>
+        <Tap noScale onPress={() => navigation.navigate('CrewMembers', { crewId: crew.id })} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 6 }}>
+          <T size={15} weight="700" style={{ flex: 1 }}>
+            {crew.name} · 크루원 {detail.data?.memberCount ?? crew.members}명
+          </T>
+          <T size={13} color={C.sub}>
+            전체 보기
+          </T>
+          <IcChevron size={16} color={C.sub} />
+        </Tap>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 14 }}>
+          {members.map((m) => (
+            <Pressable
+              key={m.id}
+              accessibilityRole="link"
+              disabled={m.isMe}
+              onPress={() => navigation.navigate('UserProfile', { userId: m.id })}
+              style={{ width: 52, alignItems: 'center', gap: 4 }}
+            >
+              <Avatar letter={m.name.slice(0, 1)} color={m.color} size={44} />
+              <T size={12} weight={m.role === 'leader' ? '700' : '500'} numberOfLines={1}>
+                {m.isMe ? '나' : m.name}
+              </T>
+            </Pressable>
+          ))}
+          <Pressable accessibilityRole="button" accessibilityLabel="크루원 초대" onPress={() => navigation.navigate('CrewInvite', { crewId: crew.id })} style={{ width: 52, alignItems: 'center', gap: 4 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.seg, alignItems: 'center', justifyContent: 'center' }}>
+              <T size={22} weight="500" color={C.sub}>
+                +
+              </T>
+            </View>
+            <T size={12} color={C.sub}>
+              초대
+            </T>
+          </Pressable>
+        </ScrollView>
+      </Glass>
       {c ? (
         <Glass kind="lime" style={{ borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           <Svg width={96} height={96} viewBox="0 0 96 96">

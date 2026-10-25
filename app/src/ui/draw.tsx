@@ -1,18 +1,50 @@
 import QRCode from 'qrcode';
 import { useMemo, useRef, useState } from 'react';
 import { PanResponder, View } from 'react-native';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { C } from '../theme';
 
 type Pt = [number, number];
 
-/** 손가락으로 그리는 판. strokes는 선 목록, 그리기 모드가 아니면 손가락을 무시한다 */
+const ERASE_R = 16;
+
+/** 지우개가 지나간 자리의 점만 지운다. 선 중간이 지워지면 두 선으로 나뉜다 */
+export function eraseAt(strokes: Pt[][], p: Pt, r = ERASE_R): Pt[][] {
+  const out: Pt[][] = [];
+  let changed = false;
+  for (const st of strokes) {
+    // 점 사이가 지우개보다 넓으면 중간 점을 채워 넣어 가운데만 지울 수 있게 한다
+    const dense: Pt[] = [];
+    st.forEach((q, i) => {
+      if (i) {
+        const a = st[i - 1];
+        const n = Math.floor(Math.hypot(q[0] - a[0], q[1] - a[1]) / (r / 2));
+        for (let k = 1; k < n; k++) dense.push([a[0] + ((q[0] - a[0]) * k) / n, a[1] + ((q[1] - a[1]) * k) / n]);
+      }
+      dense.push(q);
+    });
+    let cur: Pt[] = [];
+    for (const q of dense) {
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) <= r) {
+        changed = true;
+        if (cur.length > 1) out.push(cur);
+        cur = [];
+      } else cur.push(q);
+    }
+    if (cur.length > 1) out.push(cur);
+    else if (cur.length) changed = true;
+  }
+  return changed ? out : strokes;
+}
+
+/** 손가락으로 그리는 판. mode가 erase면 손가락이 지나간 부분만 지우고, off면 손가락을 무시한다 */
 export function DrawPad({
   w,
   h,
   strokes,
   onChange,
   enabled = true,
+  mode,
   color = C.ink,
   width = 4.5,
 }: {
@@ -21,25 +53,40 @@ export function DrawPad({
   strokes: Pt[][];
   onChange: (s: Pt[][]) => void;
   enabled?: boolean;
+  mode?: 'draw' | 'erase' | 'off';
   color?: string;
   width?: number;
 }) {
+  const m = mode ?? (enabled ? 'draw' : 'off');
   const live = useRef<Pt[]>([]);
+  const eraser = useRef<Pt | null>(null);
   // 그리는 중인 선은 ref에 두고, 이 값으로 다시 그리기만 일으킨다
   const [, setTick] = useState(0);
-  const ref = useRef({ strokes, onChange, enabled });
-  ref.current = { strokes, onChange, enabled };
+  const ref = useRef({ strokes, onChange, m });
+  ref.current = { strokes, onChange, m };
+  const erase = (p: Pt) => {
+    eraser.current = p;
+    const next = eraseAt(ref.current.strokes, p);
+    if (next !== ref.current.strokes) {
+      ref.current.strokes = next;
+      ref.current.onChange(next);
+    }
+    setTick((t) => t + 1);
+  };
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => ref.current.enabled,
-        onMoveShouldSetPanResponder: () => ref.current.enabled,
+        onStartShouldSetPanResponder: () => ref.current.m !== 'off',
+        onMoveShouldSetPanResponder: () => ref.current.m !== 'off',
         onPanResponderGrant: (e) => {
-          live.current = [[e.nativeEvent.locationX, e.nativeEvent.locationY]];
+          const p: Pt = [e.nativeEvent.locationX, e.nativeEvent.locationY];
+          if (ref.current.m === 'erase') return erase(p);
+          live.current = [p];
           setTick((t) => t + 1);
         },
         onPanResponderMove: (e) => {
           const p: Pt = [e.nativeEvent.locationX, e.nativeEvent.locationY];
+          if (ref.current.m === 'erase') return erase(p);
           const last = live.current[live.current.length - 1];
           if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 4) {
             live.current.push(p);
@@ -49,9 +96,11 @@ export function DrawPad({
         onPanResponderRelease: () => {
           if (live.current.length > 2) ref.current.onChange([...ref.current.strokes, live.current]);
           live.current = [];
+          eraser.current = null;
           setTick((t) => t + 1);
         },
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   const all = live.current.length ? [...strokes, live.current] : strokes;
@@ -61,6 +110,7 @@ export function DrawPad({
         {all.map((s, i) => (
           <Path key={i} d={toPath(s)} stroke={color} strokeWidth={width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
         ))}
+        {eraser.current ? <Circle cx={eraser.current[0]} cy={eraser.current[1]} r={ERASE_R} fill="rgba(255, 255, 255, 0.5)" stroke={C.ink} strokeWidth={1.5} /> : null}
       </Svg>
     </View>
   );
