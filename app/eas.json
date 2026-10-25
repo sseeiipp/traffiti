@@ -7,11 +7,11 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app", "EXPO_PUBLIC_KAKAO_JS_KEY": "aaf3f199e7f231c52188a6af0f09c05f" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://traffiti-production.up.railway.app", "EXPO_PUBLIC_KAKAO_JS_KEY": "aaf3f199e7f231c52188a6af0f09c05f" }
     }
   },
   "submit": {

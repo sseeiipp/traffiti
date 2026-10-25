@@ -24,7 +24,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.travity.app"
     },
@@ -43,6 +45,11 @@
         }
       ]
     ],
-    "scheme": "travity"
+    "scheme": "travity",
+    "extra": {
+      "eas": {
+        "projectId": "6c2d297d-5c33-460c-a2f1-a7539cef2ace"
+      }
+    }
   }
 }

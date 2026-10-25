@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { C } from '../theme';
+import { KAKAO_JS_KEY, KakaoRouteMap } from './KakaoMap';
 import { SHAPE_ICONS } from './shapes';
 
 export type LatLng = [number, number];
@@ -85,7 +86,14 @@ export interface RouteArtProps {
   hideRemaining?: boolean;
 }
 
-export function RouteArt({
+/** 지도 바탕이 필요하면 카카오맵, 키가 없거나 불러오지 못하면 단순화한 SVG 지도 */
+export function RouteArt(props: RouteArtProps) {
+  const svg = <SvgRouteArt {...props} />;
+  if (props.map === false || !KAKAO_JS_KEY || !props.route.length) return svg;
+  return <KakaoRouteMap {...props} fallback={svg} />;
+}
+
+function SvgRouteArt({
   route,
   segments,
   w,
